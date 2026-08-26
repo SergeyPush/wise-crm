@@ -1,0 +1,561 @@
+// Схема заводится целиком на этапе 1 (09-implementation-plan.md, раздел 4):
+// миграции дешевле писать один раз, чем достраивать модель под каждый этап.
+// Правила: id — uuid v4; таймстемпы — timestamptz UTC, календарные вычисления
+// в Europe/Kyiv (NFR-45); деньги — Decimal; мягкое удаление у Client, Task, Attachment.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm, citext, pgcrypto]
+}
+
+// ───────────────────────────── enums ─────────────────────────────
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AssigneeRole {
+  PRIMARY
+  SECONDARY
+}
+
+enum ClientType {
+  COMPANY // ТОВ
+  FOP
+  PERSON
+  OTHER
+}
+
+enum TaxSystem {
+  GENERAL
+  EP1
+  EP2
+  EP3_5
+  EP3_3_VAT
+  EP4
+}
+
+enum Stage {
+  LEAD
+  IN_WORK
+  WON
+  LOST
+}
+
+enum TaskType {
+  CALL
+  PROPOSAL
+  CONTRACT
+  DOCS
+  MEETING
+  OTHER
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED // v1.1, ClamAV в MVP не ставится
+}
+
+enum NotificationChannel {
+  IN_APP
+  TELEGRAM
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ──────────────────────── пользователи и сессии ────────────────────────
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique @db.Citext // логин, не канал связи (FR-1.1)
+  passwordHash        String
+  fullName            String
+  phone               String?
+  position            String?
+  avatarUrl           String?
+  role                Role      @default(USER)
+  telegramChatId      String?
+  telegramEnabled     Boolean   @default(false)
+  mustChangePassword  Boolean   @default(false) // FR-1.3, FR-1.6
+  isActive            Boolean   @default(true)
+  isProtected         Boolean   @default(false) // FR-1.8: владелец, только CLI
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  clients             ClientAssignee[]
+  tasksAssigned       Task[]               @relation("assignee")
+  tasksAuthored       Task[]               @relation("author")
+  refreshTokens       RefreshToken[]
+  passwordResets      PasswordResetToken[]
+  comments            Comment[]
+  attachments         Attachment[]
+  notifications       Notification[]
+  auditEntries        AuditLog[]           @relation("actor")
+  auditTargeted       AuditLog[]           @relation("targetUser")
+  activityEvents      ActivityEvent[]
+  statusChanges       ClientStatusHistory[]
+
+  @@index([isActive])
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique // в БД только хеш
+  familyId   String    @db.Uuid // ротация: повторное использование отзывает семью
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Одноразовая ссылка смены пароля (FR-1.3): 72 часа, в БД только хеш.
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdBy String?   @db.Uuid // null = выпущен через CLI (FR-1.7)
+  viaCli    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Попытки входа для FR-1.5: блокировка email после 10 неудач на 15 минут.
+// Отдельная таблица, а не память процесса: перезапуск контейнера не должен
+// сбрасывать счётчик, иначе лимит обходится рестартом.
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @db.Citext
+  ip        String?
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+// ──────────────────────────── клиенты ────────────────────────────
+
+model Client {
+  id                 String     @id @default(uuid()) @db.Uuid
+  displayName        String
+  legalName          String?
+  type               ClientType @default(OTHER)
+  edrpou             String?    @db.VarChar(8)
+  rnokpp             String?    @db.VarChar(10)
+  vatNumber          String?    @db.VarChar(12)
+  isVatPayer         Boolean    @default(false)
+  vatRegDate         DateTime?  @db.Date
+  taxSystem          TaxSystem?
+  kved               String?
+  employeeCount      Int?
+  documentsPerMonth  Int? // вход для расчёта тарифа, из веб-формы
+  isDiiaCity         Boolean    @default(false)
+  businessTypes      String[]   @default([])
+  needsQualification Boolean    @default(false) // заявка без имени (FR-W3)
+  legalAddress       String?
+  actualAddress      String?
+  statusId           String     @db.Uuid
+  sourceId           String?    @db.Uuid
+  lostReasonId       String?    @db.Uuid
+  monthlyFee         Decimal?   @db.Decimal(12, 2)
+  contractNo         String?
+  contractDate       DateTime?  @db.Date
+  notes              String?
+  customFields       Json       @default("{}")
+  lastActivityAt     DateTime? // денормализация из activity_events (FR-5.2.1)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  status        ClientStatus          @relation(fields: [statusId], references: [id])
+  source        LeadSource?           @relation(fields: [sourceId], references: [id])
+  lostReason    LostReason?           @relation(fields: [lostReasonId], references: [id])
+  assignees     ClientAssignee[]
+  contacts      ClientContact[]
+  tasks         Task[]
+  statusHistory ClientStatusHistory[]
+  comments      Comment[]
+  files         Attachment[]
+  tags          ClientTag[]
+  activity      ActivityEvent[]
+  webLeads      WebLead[]
+
+  @@index([statusId])
+  @@index([edrpou])
+  @@index([rnokpp])
+  @@index([deletedAt])
+  @@index([lastActivityAt])
+}
+
+// Ровно один PRIMARY на клиента — частичным уникальным индексом в миграции:
+// UNIQUE (client_id) WHERE role = 'PRIMARY'
+model ClientAssignee {
+  clientId  String       @db.Uuid
+  userId    String       @db.Uuid
+  role      AssigneeRole @default(SECONDARY)
+  createdAt DateTime     @default(now())
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@id([clientId, userId])
+  @@index([userId]) // «мои клиенты» — главный запрос системы
+}
+
+model ClientContact {
+  id              String  @id @default(uuid()) @db.Uuid
+  clientId        String  @db.Uuid
+  fullName        String? // в веб-форме имени нет (FR-W3)
+  position        String?
+  phone           String? // как ввёл пользователь
+  phoneNormalized String? // +380XXXXXXXXX (NFR-5.1)
+  email           String? @db.Citext
+  messenger       String?
+  isPrimary       Boolean @default(false)
+  client          Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([phoneNormalized])
+  @@index([email])
+}
+
+model ClientStatus {
+  id              String   @id @default(uuid()) @db.Uuid
+  code            String   @unique
+  label           String
+  color           String
+  sortOrder       Int
+  stage           Stage
+  isTerminal      Boolean  @default(false)
+  requiresReason  Boolean  @default(false) // FR-2.8 вместо хардкода LOST
+  isDefaultForNew Boolean  @default(false) // partial unique в миграции
+  isActive        Boolean  @default(true)
+
+  clients      Client[]
+  historyFrom  ClientStatusHistory[] @relation("fromStatus")
+  historyTo    ClientStatusHistory[] @relation("toStatus")
+}
+
+model ClientStatusHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  clientId  String   @db.Uuid
+  fromId    String?  @db.Uuid
+  toId      String   @db.Uuid
+  reasonId  String?  @db.Uuid
+  comment   String?
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  from   ClientStatus? @relation("fromStatus", fields: [fromId], references: [id])
+  to     ClientStatus  @relation("toStatus", fields: [toId], references: [id])
+  reason LostReason?   @relation(fields: [reasonId], references: [id])
+  user   User          @relation(fields: [userId], references: [id])
+
+  @@index([clientId, createdAt])
+}
+
+// ──────────────────────────── задачи ────────────────────────────
+
+model Task {
+  id           String     @id @default(uuid()) @db.Uuid
+  title        String
+  description  String?
+  type         TaskType   @default(OTHER)
+  status       TaskStatus @default(OPEN)
+  priority     Priority   @default(NORMAL)
+  clientId     String?    @db.Uuid
+  assigneeId   String?    @db.Uuid // null — задача из пула (FR-W5)
+  authorId     String     @db.Uuid
+  dueAt        DateTime? // день считается по Europe/Kyiv (FR-3.1.1)
+  completedAt  DateTime?
+  result       String? // обязателен при DONE для CALL/PROPOSAL/CONTRACT (FR-3.5)
+  cancelReason String? // обязателен при CANCELLED
+  recurrenceId String?    @db.Uuid // FR-3.6, v1.1
+  sourceKey    String?    @unique // идемпотентность системных задач (FR-W5/W6)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime? // мягкое удаление (FR-3.8)
+
+  client     Client?         @relation(fields: [clientId], references: [id])
+  assignee   User?           @relation("assignee", fields: [assigneeId], references: [id])
+  author     User            @relation("author", fields: [authorId], references: [id])
+  recurrence TaskRecurrence? @relation(fields: [recurrenceId], references: [id])
+  comments   Comment[]
+
+  @@index([assigneeId, status, dueAt])
+  @@index([clientId])
+  @@index([dueAt])
+  @@index([deletedAt])
+}
+
+// Шаблон повторения (FR-3.6, v1.1). Поле в Task заложено сразу, экрана нет.
+model TaskRecurrence {
+  id        String   @id @default(uuid()) @db.Uuid
+  rrule     String // RRULE (RFC 5545)
+  template  Json // поля будущей задачи
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tasks     Task[]
+}
+
+// ──────────────── активность, комментарии, файлы ────────────────
+
+// Append-only, пишется в одной транзакции с мутацией. Единственный источник
+// ленты на карточке и Client.lastActivityAt (FR-2.16).
+model ActivityEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  clientId   String?  @db.Uuid
+  type       String // status_changed | comment | task_created | file_added | field_changed
+  actorId    String   @db.Uuid
+  entityType String?
+  entityId   String?  @db.Uuid
+  payload    Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actor  User    @relation(fields: [actorId], references: [id])
+
+  @@index([clientId, createdAt(sort: Desc)])
+}
+
+model Comment {
+  id         String    @id @default(uuid()) @db.Uuid
+  entityType String // client | task
+  entityId   String    @db.Uuid
+  clientId   String?   @db.Uuid // денормализация для ленты клиента
+  taskId     String?   @db.Uuid
+  authorId   String    @db.Uuid
+  body       String
+  mentions   String[]  @default([]) // id упомянутых (FR-2.17)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  author User    @relation(fields: [authorId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  task   Task?   @relation(fields: [taskId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([clientId])
+}
+
+model Attachment {
+  id           String     @id @default(uuid()) @db.Uuid
+  entityType   String // client | task | comment
+  entityId     String     @db.Uuid
+  clientId     String?    @db.Uuid
+  categoryId   String?    @db.Uuid
+  originalName String
+  storageKey   String     @unique
+  mimeType     String
+  sizeBytes    Int
+  sha256       String // целостность при восстановлении; дедупликация — v1.1 (FR-F14)
+  period       String? // «2025-Q3» для звітності
+  isPinned     Boolean    @default(false)
+  scanStatus   ScanStatus @default(PENDING)
+  parentId     String?    @db.Uuid // версии
+  version      Int        @default(1)
+  uploadedById String     @db.Uuid
+  createdAt    DateTime   @default(now())
+  deletedAt    DateTime?
+
+  client     Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  category   DocumentCategory?  @relation(fields: [categoryId], references: [id])
+  uploadedBy User               @relation(fields: [uploadedById], references: [id])
+
+  @@index([clientId, categoryId])
+  @@index([entityType, entityId])
+  @@index([sha256])
+}
+
+// ──────────────────────── уведомления ────────────────────────
+
+model Notification {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  type       String // task_assigned | mention | web_lead | password_reset | ...
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?  @db.Uuid
+  link       String? // прямая ссылка на объект в CRM
+  priority   Priority @default(NORMAL)
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, readAt, createdAt])
+}
+
+// Outbox: отправка внешним каналом никогда не идёт из HTTP-запроса,
+// иначе упавший Telegram роняет создание задачи.
+model NotificationDelivery {
+  id             String              @id @default(uuid()) @db.Uuid
+  notificationId String              @db.Uuid
+  channel        NotificationChannel
+  status         DeliveryStatus      @default(PENDING)
+  attempts       Int                 @default(0)
+  lastError      String?
+  scheduledAt    DateTime            @default(now()) // тихие часы сдвигают сюда
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+}
+
+// ──────────────────────────── аудит ────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorId      String?  @db.Uuid // null — системное действие
+  action       String // user.create | client.delete | password.reset | ...
+  entityType   String?
+  entityId     String?  @db.Uuid
+  targetUserId String?  @db.Uuid // FR-1.3: сброс пароля пишет обоих участников
+  payload      Json     @default("{}")
+  ip           String?
+  viaCli       Boolean  @default(false) // FR-1.7
+  createdAt    DateTime @default(now())
+
+  actor      User? @relation("actor", fields: [actorId], references: [id])
+  targetUser User? @relation("targetUser", fields: [targetUserId], references: [id])
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+// ────────────────── заявки с сайта (FR-W1–W9) ──────────────────
+
+model WebLead {
+  id          String    @id @default(uuid()) @db.Uuid
+  rawPayload  Json // сохраняется ДО разбора: неизвестное значение не теряет заявку
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  clientId    String?   @db.Uuid
+  isDuplicate Boolean   @default(false) // повторная заявка (FR-W6)
+  isTest      Boolean   @default(false) // payload с test: true (FR-W8)
+  error       String?
+  sourceIp    String?
+
+  client Client? @relation(fields: [clientId], references: [id])
+
+  @@index([receivedAt])
+  @@index([processedAt])
+}
+
+// Соответствие значений веб-формы полям CRM (FR-W4). В БД, потому что
+// значения на сайте меняются без релиза CRM.
+model WebFormMapping {
+  id          String @id @default(uuid()) @db.Uuid
+  field       String // OrganisationalForm | TaxSystem | AdditionalInfo | ...
+  rawValue    String
+  targetPath  String // client.taxSystem
+  mappedValue String // GENERAL
+
+  @@unique([field, rawValue])
+}
+
+// ──────────────────────── справочники ────────────────────────
+
+model LeadSource {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  isSystem  Boolean  @default(false) // «Сайт» проставляет FR-W5, удалять нельзя
+  clients   Client[]
+}
+
+model LostReason {
+  id        String                @id @default(uuid()) @db.Uuid
+  code      String                @unique
+  label     String
+  sortOrder Int                   @default(0)
+  isActive  Boolean               @default(true)
+  clients   Client[]
+  history   ClientStatusHistory[]
+}
+
+model Tag {
+  id      String     @id @default(uuid()) @db.Uuid
+  name    String     @unique
+  color   String     @default("gray")
+  clients ClientTag[]
+}
+
+model ClientTag {
+  clientId String @db.Uuid
+  tagId    String @db.Uuid
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, tagId])
+}
+
+// Тип задачи как справочник для UI (label, порядок); логика работает по enum TaskType.
+model TaskTypeRef {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      TaskType @unique
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+}
+
+model DocumentCategory {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  label       String
+  sortOrder   Int          @default(0)
+  isActive    Boolean      @default(true)
+  attachments Attachment[]
+}
+
+// Настройки, меняемые админом без передеплоя (FR-0.1)
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?  @db.Uuid
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+apps/api/public/
+*.tsbuildinfo
+.env
+.env.local
+*.log
+coverage/
+.DS_Store
+apps/web/src/lib/api/schema.d.ts
+playwright-report/
+test-results/
+uploads/

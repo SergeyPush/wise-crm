@@ -1,0 +1,41 @@
+# Прод-стек: два контейнера за существующим nginx (04-deployment.md).
+name: wise-crm
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Europe/Kyiv
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER}']
+      interval: 10s
+      retries: 5
+
+  api:
+    image: ghcr.io/${GH_OWNER}/wise-crm:${TAG}
+    container_name: wise-crm-api # по этому имени его находит nginx
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes: [uploads:/app/uploads]
+    networks: [internal, web]
+    # ports: ['127.0.0.1:3001:3000']  # раскомментировать, если nginx на хосте
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/v1/health']
+      interval: 30s
+
+networks:
+  internal:
+  web:
+    external: true # общая сеть с nginx: docker network create web
+
+volumes:
+  pgdata: {}
+  uploads: {}

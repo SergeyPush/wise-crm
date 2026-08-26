@@ -1,0 +1,13 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Нативные модули (argon2) и генераторы (prisma) должны отработать postinstall
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  argon2: true
+  esbuild: true
+  '@swc/core': true
+  '@scarf/scarf': false
