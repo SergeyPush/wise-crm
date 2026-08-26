@@ -17,7 +17,8 @@
     "generate": "prisma generate",
     "seed": "tsx prisma/seed.ts",
     "seed:dev": "tsx prisma/seed-dev.ts",
-    "cli": "node dist/cli.js"
+    "cli": "node dist/cli.js",
+    "start:e2e": "prisma migrate deploy && tsx prisma/seed.ts && tsx prisma/seed-dev.ts && nest start"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -54,6 +54,10 @@ export class Agent {
     return this.capture(await this.req('patch', path).send(body as object));
   }
 
+  async put(path: string, body?: unknown) {
+    return this.capture(await this.req('put', path).send(body as object));
+  }
+
   async delete(path: string) {
     return this.capture(await this.req('delete', path));
   }

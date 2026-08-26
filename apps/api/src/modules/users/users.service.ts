@@ -334,6 +334,15 @@ export class UsersService {
     });
   }
 
+  /** Легкий список для форм: вибір відповідального (FR-2.0), @згадки (FR-2.17). */
+  async lite() {
+    return this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async findByEmail(email: string) {
     return this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   }

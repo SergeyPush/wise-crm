@@ -12,6 +12,9 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { MeModule } from './modules/me/me.module';
 import { HealthModule } from './modules/health/health.module';
+import { DictionariesModule } from './modules/dictionaries/dictionaries.module';
+import { ClientsModule } from './modules/clients/clients.module';
+import { WebLeadsModule } from './modules/web-leads/web-leads.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -55,6 +58,9 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     UsersModule,
     MeModule,
     HealthModule,
+    DictionariesModule,
+    ClientsModule,
+    WebLeadsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

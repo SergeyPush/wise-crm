@@ -9,6 +9,7 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-value-at-least-32-chars';
 process.env.COOKIE_SECURE = 'false';
 process.env.LOG_LEVEL = 'silent';
 process.env.APP_URL = 'http://localhost:5173';
+process.env.WEB_FORM_TOKEN = 'test-web-form-token';
 // Bootstrap первого админа в тестах не нужен — учётки создают фабрики
 delete process.env.ADMIN_BOOTSTRAP_EMAIL;
 

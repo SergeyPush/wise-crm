@@ -58,6 +58,16 @@ describe('Користувачі (ADMIN)', () => {
       // Хеш пароля наружу не отдаётся
       expect(res.body.items[0].passwordHash).toBeUndefined();
     });
+
+    it('USER бачить полегшений /users/lite — потрібен для вибору відповідального (FR-2.0)', async () => {
+      const { agent } = await loggedInUser();
+
+      const res = await agent.get('/users/lite');
+
+      expect(res.status).toBe(200);
+      expect(res.body[0]).not.toHaveProperty('email');
+      expect(res.body[0]).toHaveProperty('fullName');
+    });
   });
 
   describe('Створення (FR-1.3)', () => {

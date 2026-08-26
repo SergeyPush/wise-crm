@@ -19,6 +19,17 @@ export class UsersController {
     return this.users.list(query);
   }
 
+  // Перед /:id — інакше «lite» зʼїсть ParseUUIDPipe.
+  // @RequirePermission() без аргументів знімає обмеження класу (user:manage):
+  // список активних потрібен усім — вибір відповідального (FR-2.0),
+  // автодоповнення @згадок (FR-2.17).
+  @Get('lite')
+  @RequirePermission()
+  @ApiOperation({ summary: "Активні співробітники (id, ПІБ) — для форм і згадок" })
+  lite() {
+    return this.users.lite();
+  }
+
   @Get(':id')
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.get(id);

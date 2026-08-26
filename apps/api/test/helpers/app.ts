@@ -50,6 +50,7 @@ const DICTIONARY_TABLES = [
   'DocumentCategory',
   'AppSetting',
   'Tag',
+  'WebFormMapping',
 ];
 
 export async function resetData(prisma: PrismaService): Promise<void> {

@@ -70,13 +70,13 @@ jobs:
     needs: check
 
     services:
-      postgres:
+      postgres_test:
         image: postgres:17-alpine
         env:
-          POSTGRES_DB: wisecrm
+          POSTGRES_DB: wisecrm_test
           POSTGRES_USER: wisecrm
           POSTGRES_PASSWORD: wisecrm
-        ports: ['5432:5432']
+        ports: ['5434:5432']
         options: >-
           --health-cmd pg_isready
           --health-interval 5s
@@ -84,12 +84,9 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://wisecrm:wisecrm@localhost:5432/wisecrm?schema=public
-      JWT_ACCESS_SECRET: ci-access-secret-value-at-least-32-chars
-      JWT_REFRESH_SECRET: ci-refresh-secret-value-at-least-32-chars
-      COOKIE_SECURE: 'false'
-      PORT: '3000'
-      NODE_ENV: development
+      # playwright.config.ts сам поднимает API (миграции + сиды + seed-dev)
+      # и фронт через webServer — здесь только то, что ему нужно передать
+      TEST_DATABASE_URL: postgresql://wisecrm:wisecrm@localhost:5434/wisecrm_test?schema=public
 
     steps:
       - uses: actions/checkout@v4
@@ -103,10 +100,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter shared build
-      - run: pnpm --filter api exec prisma migrate deploy
-      - run: pnpm --filter api exec tsx prisma/seed.ts
-      - run: pnpm --filter api build
-      - run: pnpm --filter web build
+      - run: pnpm --filter api exec prisma generate
 
       - run: pnpm exec playwright install --with-deps chromium
 

@@ -221,6 +221,11 @@ model Client {
   @@index([rnokpp])
   @@index([deletedAt])
   @@index([lastActivityAt])
+  // FR-2.10: триграммы вместо LIKE '%…%' — иначе поиск на тысячах записей
+  // идёт seq scan'ом. Задекларировано здесь (а не заведено «молча» SQL-миграцией),
+  // чтобы `prisma migrate dev` не считал индекс дрейфом и не удалял его на каждом шаге.
+  @@index([displayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "clients_display_name_trgm")
+  @@index([legalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "clients_legal_name_trgm")
 }
 
 // Ровно один PRIMARY на клиента — частичным уникальным индексом в миграции:
@@ -252,6 +257,7 @@ model ClientContact {
   @@index([clientId])
   @@index([phoneNormalized])
   @@index([email])
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "client_contacts_full_name_trgm")
 }
 
 model ClientStatus {
@@ -301,7 +307,7 @@ model Task {
   priority     Priority   @default(NORMAL)
   clientId     String?    @db.Uuid
   assigneeId   String?    @db.Uuid // null — задача из пула (FR-W5)
-  authorId     String     @db.Uuid
+  authorId     String?    @db.Uuid // null — системная задача (FR-W5/W6), людини-автора немає
   dueAt        DateTime? // день считается по Europe/Kyiv (FR-3.1.1)
   completedAt  DateTime?
   result       String? // обязателен при DONE для CALL/PROPOSAL/CONTRACT (FR-3.5)
@@ -314,7 +320,7 @@ model Task {
 
   client     Client?         @relation(fields: [clientId], references: [id])
   assignee   User?           @relation("assignee", fields: [assigneeId], references: [id])
-  author     User            @relation("author", fields: [authorId], references: [id])
+  author     User?           @relation("author", fields: [authorId], references: [id])
   recurrence TaskRecurrence? @relation(fields: [recurrenceId], references: [id])
   comments   Comment[]
 
@@ -341,15 +347,15 @@ model TaskRecurrence {
 model ActivityEvent {
   id         String   @id @default(uuid()) @db.Uuid
   clientId   String?  @db.Uuid
-  type       String // status_changed | comment | task_created | file_added | field_changed
-  actorId    String   @db.Uuid
+  type       String // status_changed | comment | task_created | field_changed | web_lead | ...
+  actorId    String?  @db.Uuid // null — системна подія (заявка з сайту, FR-W5/W6)
   entityType String?
   entityId   String?  @db.Uuid
   payload    Json     @default("{}")
   createdAt  DateTime @default(now())
 
   client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  actor  User    @relation(fields: [actorId], references: [id])
+  actor  User?   @relation(fields: [actorId], references: [id])
 
   @@index([clientId, createdAt(sort: Desc)])
 }
@@ -360,14 +366,14 @@ model Comment {
   entityId   String    @db.Uuid
   clientId   String?   @db.Uuid // денормализация для ленты клиента
   taskId     String?   @db.Uuid
-  authorId   String    @db.Uuid
+  authorId   String?   @db.Uuid // null — повідомлення з заявки сайту (FR-W4, поле question)
   body       String
   mentions   String[]  @default([]) // id упомянутых (FR-2.17)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   deletedAt  DateTime?
 
-  author User    @relation(fields: [authorId], references: [id])
+  author User?   @relation(fields: [authorId], references: [id])
   client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
   task   Task?   @relation(fields: [taskId], references: [id])
 

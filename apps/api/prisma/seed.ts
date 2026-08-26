@@ -56,6 +56,21 @@ const LOST_REASONS = [
   { code: 'OTHER', label: 'Інше', sortOrder: 50 },
 ] as const;
 
+// Рабочая заглушка до ответа заказчика, какие именно значения отдаёт форма
+// сайта (07-open-questions.md, раздел 2; FR-W4). Неизвестное значение не
+// роняет заявку (FR-W2) — оно просто останется немапленным до уточнения.
+const WEB_FORM_MAPPINGS = [
+  { field: 'OrganisationalForm', rawValue: 'ФОП', targetPath: 'client.type', mappedValue: 'FOP' },
+  { field: 'OrganisationalForm', rawValue: 'ТОВ', targetPath: 'client.type', mappedValue: 'COMPANY' },
+  { field: 'OrganisationalForm', rawValue: 'інше', targetPath: 'client.type', mappedValue: 'OTHER' },
+  { field: 'TaxSystem', rawValue: 'Загальна система', targetPath: 'client.taxSystem', mappedValue: 'GENERAL' },
+  { field: 'TaxSystem', rawValue: 'ЄП 1 група', targetPath: 'client.taxSystem', mappedValue: 'EP1' },
+  { field: 'TaxSystem', rawValue: 'ЄП 2 група', targetPath: 'client.taxSystem', mappedValue: 'EP2' },
+  { field: 'TaxSystem', rawValue: 'ЄП 3 група 5%', targetPath: 'client.taxSystem', mappedValue: 'EP3_5' },
+  { field: 'TaxSystem', rawValue: 'ЄП 3 група 3% + ПДВ', targetPath: 'client.taxSystem', mappedValue: 'EP3_3_VAT' },
+  { field: 'TaxSystem', rawValue: 'ЄП 4 група', targetPath: 'client.taxSystem', mappedValue: 'EP4' },
+] as const;
+
 const APP_SETTINGS = [
   { key: 'PROPOSAL_NO_REPLY_DAYS', value: 5 }, // FR-5.2
   { key: 'LEAD_INACTIVE_DAYS', value: 7 },
@@ -118,6 +133,14 @@ async function main(): Promise<void> {
     });
   }
 
+  for (const m of WEB_FORM_MAPPINGS) {
+    await prisma.webFormMapping.upsert({
+      where: { field_rawValue: { field: m.field, rawValue: m.rawValue } },
+      create: m,
+      update: { mappedValue: m.mappedValue },
+    });
+  }
+
   for (const s of APP_SETTINGS) {
     await prisma.appSetting.upsert({
       where: { key: s.key },
@@ -130,6 +153,7 @@ async function main(): Promise<void> {
   console.log(`  статуси: ${STATUSES.length}, типи задач: ${TASK_TYPES.length}`);
   console.log(`  категорії документів: ${DOCUMENT_CATEGORIES.length}`);
   console.log(`  джерела: ${LEAD_SOURCES.length}, причини відмови: ${LOST_REASONS.length}`);
+  console.log(`  мапінг веб-форми: ${WEB_FORM_MAPPINGS.length} (заглушка до 07-open-questions.md)`);
   console.log(`  налаштування: ${APP_SETTINGS.length}`);
 }
 
