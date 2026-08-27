@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsIn,
   IsOptional,
@@ -160,6 +163,17 @@ export class CancelTaskDto {
   @MinLength(1, { message: 'Вкажіть причину скасування' })
   @MaxLength(2000)
   reason!: string;
+}
+
+/** Масове видалення на вкладці «Завершені» (backlog 27.08.2026) — лише ADMIN, сервіс перевіряє. */
+export class BulkDeleteTasksDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  // Той самий ліміт 100, що й у BulkClientsDto — узгоджено з розміром сторінки списку.
+  @ArrayMaxSize(100)
+  @IsUUID(undefined, { each: true })
+  ids!: string[];
 }
 
 export class SnoozeTaskDto {

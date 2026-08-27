@@ -4,6 +4,7 @@ import { AuthUser, CurrentUser } from '../../common/decorators/current-user.deco
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
 import { TasksService } from './tasks.service';
 import {
+  BulkDeleteTasksDto,
   CancelTaskDto,
   CompleteTaskDto,
   CreateTaskDto,
@@ -22,6 +23,14 @@ export class TasksController {
   @ApiOperation({ summary: 'Список: группування по строках — на клієнті' })
   list(@Query() query: ListTasksQueryDto, @CurrentUser() actor: AuthUser) {
     return this.tasks.list(query, actor.id);
+  }
+
+  // Перед /:id — інакше «bulk-delete» зʼїсть ParseUUIDPipe (як bulk/duplicates у clients.controller)
+  @Post('bulk-delete')
+  @RequirePermission()
+  @ApiOperation({ summary: "Масове м'яке видалення завершених/скасованих, лише ADMIN (backlog 27.08.2026)" })
+  bulkDelete(@Body() dto: BulkDeleteTasksDto, @CurrentUser() actor: AuthUser) {
+    return this.tasks.bulkDelete(dto.ids, actor);
   }
 
   @Get(':id')

@@ -121,3 +121,13 @@ export function useDeleteTask() {
     onSuccess: () => invalidateTasks(qc),
   });
 }
+
+/** Масове видалення на вкладці «Завершені», лише ADMIN (backlog 27.08.2026). */
+export function useBulkDeleteTasks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<{ succeeded: number; failed: Array<{ id: string; error: string }> }>('/tasks/bulk-delete', { ids }),
+    onSuccess: () => invalidateTasks(qc),
+  });
+}
