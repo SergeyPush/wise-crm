@@ -17,6 +17,7 @@ import { Paginated, endOfKyivDay } from 'shared';
 import { api } from '../lib/api';
 import { Me, useLogout } from '../features/auth/useAuth';
 import { ClientListItem } from '../features/clients/types';
+import { NotificationBell } from '../features/notifications/NotificationBell';
 import { TaskItem } from '../features/tasks/types';
 import { GlobalSearch } from './GlobalSearch';
 
@@ -98,34 +99,37 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
             </Text>
           </Group>
 
-          <Menu position="bottom-end" width={200}>
-            <Menu.Target>
-              <UnstyledButton>
-                <Group gap="xs" wrap="nowrap">
-                  <Avatar size={32} radius="xl" color="brand">
-                    {initials(me.fullName)}
-                  </Avatar>
-                  <Text size="sm" visibleFrom="sm">
-                    {me.fullName}
-                  </Text>
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>{me.email}</Menu.Label>
-              <Menu.Item component={Link} to="/profile" leftSection={<IconUser size={16} />}>
-                Профіль
-              </Menu.Item>
-              <Menu.Divider />
-              <Menu.Item
-                color="red"
-                leftSection={<IconLogout size={16} />}
-                onClick={() => logout.mutate(undefined, { onSuccess: () => window.location.assign('/login') })}
-              >
-                Вийти
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+          <Group gap="xs" wrap="nowrap">
+            <NotificationBell />
+            <Menu position="bottom-end" width={200}>
+              <Menu.Target>
+                <UnstyledButton>
+                  <Group gap="xs" wrap="nowrap">
+                    <Avatar size={32} radius="xl" color="brand">
+                      {initials(me.fullName)}
+                    </Avatar>
+                    <Text size="sm" visibleFrom="sm">
+                      {me.fullName}
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>{me.email}</Menu.Label>
+                <Menu.Item component={Link} to="/profile" leftSection={<IconUser size={16} />}>
+                  Профіль
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item
+                  color="red"
+                  leftSection={<IconLogout size={16} />}
+                  onClick={() => logout.mutate(undefined, { onSuccess: () => window.location.assign('/login') })}
+                >
+                  Вийти
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
         </Group>
       </MantineAppShell.Header>
 

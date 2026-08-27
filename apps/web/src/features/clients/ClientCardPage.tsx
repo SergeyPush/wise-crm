@@ -34,6 +34,7 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
 import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
 import { useCan, useMe } from '../auth/useAuth';
+import { FilesPanel } from '../files/FilesPanel';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
 import { useCompleteTask, useCreateTask, useTasks } from '../tasks/api';
@@ -198,7 +199,7 @@ export function ClientCardPage() {
               </Tabs.Panel>
 
               <Tabs.Panel value="files" pt="md">
-                <EmptyState title="Документи — на етапі 4" description="Завантаження файлів зʼявиться разом зі стрічкою й сповіщеннями" />
+                <FilesPanel clientId={clientId} />
               </Tabs.Panel>
             </Tabs>
           </Stack>
@@ -329,6 +330,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   web_lead: 'Заявка з сайту',
   web_lead_duplicate: 'Повторна заявка з сайту',
   web_lead_unmapped_field: 'Не вдалося розпізнати значення поля заявки',
+  file_added: 'Додано документ',
+  file_removed: 'Видалено документ',
 };
 
 const REQUIRES_RESULT = new Set(['CALL', 'PROPOSAL', 'CONTRACT']);

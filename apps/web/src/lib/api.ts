@@ -6,7 +6,7 @@ import { ApiError, CSRF_HEADER } from 'shared';
  * credentials: 'include' и CSRF-заголовок на мутациях.
  */
 
-const BASE = '/api/v1';
+export const BASE = '/api/v1';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -20,7 +20,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-function csrfToken(): string {
+export function csrfToken(): string {
   const match = document.cookie.match(/(?:^|;\s*)crm_csrf=([^;]+)/);
   return match?.[1] ?? '';
 }
