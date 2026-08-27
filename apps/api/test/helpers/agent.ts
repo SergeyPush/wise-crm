@@ -62,6 +62,24 @@ export class Agent {
     return this.capture(await this.req('delete', path));
   }
 
+  /**
+   * Бінарна відповідь (XLSX, файли) — supertest за замовчуванням не
+   * буферизує невідомі MIME-типи в res.body, лишаючи його порожнім {}.
+   */
+  async getBinary(path: string): Promise<request.Response> {
+    const r = request(this.url)
+      .get(`/api/v1${path}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const cookie = this.cookieHeader();
+    if (cookie) r.set('Cookie', cookie);
+    return this.capture(await r);
+  }
+
   /** multipart/form-data — один файл (FR-F7) + довільні текстові поля форми. */
   async postFile(path: string, fileBuffer: Buffer, filename: string, fields: Record<string, string> = {}) {
     let r = request(this.url).post(`/api/v1${path}`).attach('file', fileBuffer, filename);
