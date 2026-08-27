@@ -24,7 +24,7 @@ import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, useParams } from '@tanstack/react-router';
 import { useContextMenu } from 'mantine-contextmenu';
 import { useState } from 'react';
-import { Paginated, Priority, TaskType, endOfKyivDay } from 'shared';
+import { Priority, TaskType, endOfKyivDay } from 'shared';
 import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { PageHeader } from '../../components/PageHeader';
 import { ApiRequestError, api } from '../../lib/api';
@@ -36,9 +36,8 @@ import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
 import { useTaskActions } from './actions';
 import { useTask, useUpdateTask } from './api';
+import { ClientField, ClientOption } from './ClientField';
 import { PRIORITY_LABELS, TASK_STATUS_LABELS, TASK_TYPE_LABELS, TaskItem } from './types';
-
-type ClientOption = { id: string; displayName: string };
 
 /**
  * Картка задачі — той самий `/tasks/:id`, на який веде посилання з Telegram-
@@ -292,35 +291,5 @@ function EditForm({ task }: { task: TaskItem }) {
         </Badge>
       </Group>
     </Stack>
-  );
-}
-
-/** Пошук клієнта за назвою/телефоном (той самий `GET /clients?q=`, що й у GlobalSearch). */
-function ClientField({ client, onChange }: { client: ClientOption | null; onChange: (client: ClientOption | null) => void }) {
-  const [search, setSearch] = useState('');
-
-  const query = useQuery({
-    queryKey: ['clients', 'picker', search],
-    queryFn: () => api.get<Paginated<ClientOption>>(`/clients?limit=10&q=${encodeURIComponent(search)}`),
-    enabled: search.length >= 2,
-  });
-
-  const options = new Map<string, string>();
-  if (client) options.set(client.id, client.displayName);
-  for (const c of query.data?.items ?? []) options.set(c.id, c.displayName);
-
-  return (
-    <Select
-      label="Клієнт"
-      placeholder="Пошук за назвою, телефоном…"
-      searchable
-      clearable
-      searchValue={search}
-      onSearchChange={setSearch}
-      data={[...options.entries()].map(([value, label]) => ({ value, label }))}
-      value={client?.id ?? null}
-      onChange={(id) => onChange(id ? { id, displayName: options.get(id) ?? '' } : null)}
-      nothingFoundMessage={search.length < 2 ? 'Введіть мінімум 2 символи' : query.isFetching ? 'Пошук…' : 'Нічого не знайдено'}
-    />
   );
 }

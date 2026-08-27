@@ -14,6 +14,7 @@ import { useMe } from '../auth/useAuth';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
 import { useBulkDeleteTasks, useCompleteTask, useCreateTask, useTasks } from './api';
+import { CreateTaskModal } from './CreateTaskModal';
 import { GROUP_COLLAPSED_BY_DEFAULT, GROUP_LABELS, GROUP_ORDER, groupTasks } from './group';
 import { useTaskActions } from './actions';
 import { TasksCalendar } from './TasksCalendar';
@@ -26,6 +27,7 @@ export function TasksPage() {
   const [tab, setTab] = useState<Tab>('mine');
   const [quickTitle, setQuickTitle] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [fullFormOpened, { open: openFullForm, close: closeFullForm }] = useDisclosure(false);
   const createTask = useCreateTask();
   const { data: me } = useMe();
   const bulkDelete = useBulkDeleteTasks();
@@ -90,25 +92,33 @@ export function TasksPage() {
         />
 
         {tab !== 'done' && tab !== 'calendar' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const title = quickTitle.trim();
-              if (!title) return;
-              createTask.mutate(
-                { title },
-                { onSuccess: () => setQuickTitle('') },
-              );
-            }}
-          >
-            <TextInput
-              placeholder="Що зробити? Enter → задача на себе, сьогодні. Клієнта можна прилінкувати, відкривши задачу"
-              value={quickTitle}
-              onChange={(e) => setQuickTitle(e.currentTarget.value)}
-              disabled={createTask.isPending}
-            />
-          </form>
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <form
+              style={{ flex: 1 }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const title = quickTitle.trim();
+                if (!title) return;
+                createTask.mutate(
+                  { title },
+                  { onSuccess: () => setQuickTitle('') },
+                );
+              }}
+            >
+              <TextInput
+                placeholder="Що зробити? Enter → задача на себе, сьогодні. Клієнта можна прилінкувати, відкривши задачу"
+                value={quickTitle}
+                onChange={(e) => setQuickTitle(e.currentTarget.value)}
+                disabled={createTask.isPending}
+              />
+            </form>
+            {/* Повна форма (backlog 27.08.2026) — коли одразу відомі клієнт/тип/виконавець, а не лише заголовок */}
+            <Button variant="light" onClick={openFullForm}>
+              Повна форма
+            </Button>
+          </Group>
         )}
+        <CreateTaskModal opened={fullFormOpened} onClose={closeFullForm} />
 
         {tab === 'calendar' ? (
           <TasksCalendar />
