@@ -47,6 +47,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # До этого шага docker-compose.prod.yml и scripts/*.sh на сервере не
+      # обновлялись сами — правки в git молча расходились с тем, что реально
+      # выполняется (обнаружено 27.08.2026 на первом реальном деплое).
+      # .env сюда осознанно не входит: он не в git, только на сервере (chmod 600).
+      - name: Синхронизировать compose-файл и скрипты на сервере
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: 'docker-compose.prod.yml,scripts/backup.sh,scripts/restore-test.sh,scripts/pre-deploy-dump.sh'
+          target: /opt/wise-crm/
+          strip_components: 0
+
       - name: Деплой по SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -56,6 +70,7 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/wise-crm
+            chmod +x scripts/*.sh
             ./scripts/pre-deploy-dump.sh
             export TAG=${{ github.sha }}
             export GH_OWNER=${{ steps.vars.outputs.owner }}
