@@ -1,5 +1,8 @@
 // Окружение тестового процесса. Секреты фиксированные: тесты не должны
 // зависеть от содержимого .env разработчика.
+import os from 'node:os';
+import path from 'node:path';
+
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
@@ -10,6 +13,9 @@ process.env.COOKIE_SECURE = 'false';
 process.env.LOG_LEVEL = 'silent';
 process.env.APP_URL = 'http://localhost:5173';
 process.env.WEB_FORM_TOKEN = 'test-web-form-token';
+// Свій каталог на прогін, а не apps/api/uploads — інакше тестові файли
+// накопичувались би в репозиторії й пережили б сам тест.
+process.env.UPLOAD_DIR = path.join(os.tmpdir(), `wise-crm-test-uploads-${process.pid}`);
 // Bootstrap первого админа в тестах не нужен — учётки создают фабрики
 delete process.env.ADMIN_BOOTSTRAP_EMAIL;
 

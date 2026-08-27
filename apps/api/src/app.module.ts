@@ -16,6 +16,7 @@ import { DictionariesModule } from './modules/dictionaries/dictionaries.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { CommentsModule } from './modules/comments/comments.module';
+import { FilesModule } from './modules/files/files.module';
 import { WebLeadsModule } from './modules/web-leads/web-leads.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -64,6 +65,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     ClientsModule,
     TasksModule,
     CommentsModule,
+    FilesModule,
     WebLeadsModule,
   ],
   providers: [

@@ -62,6 +62,17 @@ export class Agent {
     return this.capture(await this.req('delete', path));
   }
 
+  /** multipart/form-data — один файл (FR-F7) + довільні текстові поля форми. */
+  async postFile(path: string, fileBuffer: Buffer, filename: string, fields: Record<string, string> = {}) {
+    let r = request(this.url).post(`/api/v1${path}`).attach('file', fileBuffer, filename);
+    for (const [key, value] of Object.entries(fields)) r = r.field(key, value);
+    const cookie = this.cookieHeader();
+    if (cookie) r.set('Cookie', cookie);
+    const csrf = this.cookies['crm_csrf'];
+    if (csrf) r.set(CSRF_HEADER, csrf);
+    return this.capture(await r);
+  }
+
   /** Мутация без CSRF-заголовка — для проверки самого CSRF-заслона. */
   async postWithoutCsrf(path: string, body?: unknown) {
     const r = request(this.url).post(`/api/v1${path}`);

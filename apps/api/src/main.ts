@@ -7,19 +7,23 @@ import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
+import fastifyMultipart from '@fastify/multipart';
 // Без значения: только даёт декларацию reply.sendFile() (используется в AllExceptionsFilter для SPA-fallback)
 import '@fastify/static';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AppModule } from './app.module';
+import { MAX_FILE_BYTES } from './modules/files/file-limits';
 import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     // trustProxy: приложение стоит за nginx; без него rate limit и аудит
-    // запишут IP прокси вместо IP пользователя (03-tech-stack.md)
-    new FastifyAdapter({ trustProxy: true, bodyLimit: 1_048_576 }),
+    // запишут IP прокси вместо IP пользователя (03-tech-stack.md).
+    // bodyLimit — MAX_FILE_BYTES с запасом на служебные части multipart (FR-F7:
+    // один файл = один запрос, поэтому лимит тела и лимит файла — одно число).
+    new FastifyAdapter({ trustProxy: true, bodyLimit: MAX_FILE_BYTES + 1_048_576 }),
     { bufferLogs: true },
   );
 
@@ -28,6 +32,11 @@ async function bootstrap(): Promise<void> {
   const isProd = config.get<string>('NODE_ENV') === 'production';
 
   await app.register(fastifyCookie);
+  // throwFileSizeLimit: чиста ошибка вместо тихого обрезания потока при превышении
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: MAX_FILE_BYTES, files: 1 },
+    throwFileSizeLimit: true,
+  });
 
   // NFR-42: строгий CSP без inline-скриптов. CRM живёт на своём origin,
   // поэтому совмещать политику с маркетинговым сайтом не приходится.

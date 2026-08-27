@@ -2,7 +2,9 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyMultipart from '@fastify/multipart';
 import { AppModule } from '../../src/app.module';
+import { MAX_FILE_BYTES } from '../../src/modules/files/file-limits';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 export type TestApp = {
@@ -19,10 +21,14 @@ export async function createTestApp(): Promise<TestApp> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ trustProxy: true }),
+    new FastifyAdapter({ trustProxy: true, bodyLimit: MAX_FILE_BYTES + 1_048_576 }),
     { logger: false },
   );
   await app.register(fastifyCookie);
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: MAX_FILE_BYTES, files: 1 },
+    throwFileSizeLimit: true,
+  });
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({

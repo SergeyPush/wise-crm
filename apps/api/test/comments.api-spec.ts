@@ -49,4 +49,24 @@ describe('Коментарі (FR-8.1 «Додати коментар»)', () => 
     const res = await agent.post('/comments', { entityType: 'client', entityId: '00000000-0000-0000-0000-000000000000', body: 'Текст' });
     expect(res.status).toBe(404);
   });
+
+  it('@згадка створює сповіщення згаданому (FR-2.17), автору себе — ні', async () => {
+    const { agent, user: author } = await loggedInUser('author@test.ua');
+    const mentioned = await makeUser(ctx.prisma, { email: 'mentioned@test.ua', fullName: 'Згаданий' });
+    const client = await makeClient(ctx.prisma);
+
+    const res = await agent.post('/comments', {
+      entityType: 'client',
+      entityId: client.id,
+      body: '@Згаданий, гляньте будь ласка',
+      mentionedUserIds: [mentioned.id, author.id],
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.mentions).toEqual([mentioned.id]);
+    const notifications = await ctx.prisma.notification.findMany({ where: { userId: mentioned.id, type: 'mention' } });
+    expect(notifications).toHaveLength(1);
+    const selfNotified = await ctx.prisma.notification.findMany({ where: { userId: author.id, type: 'mention' } });
+    expect(selfNotified).toHaveLength(0);
+  });
 });
