@@ -94,9 +94,12 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
               visibleFrom="sm"
               size="sm"
             />
-            <Text fw={700} size="lg">
-              WiseCRM
-            </Text>
+            <Group gap={8} wrap="nowrap">
+              <img src="/logo.png" alt="" width={28} height={28} style={{ borderRadius: 6, flexShrink: 0 }} />
+              <Text fw={700} size="lg">
+                WiseCRM
+              </Text>
+            </Group>
           </Group>
 
           <Group gap="xs" wrap="nowrap">
