@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Code, CopyButton, Group, Paper, PasswordInput, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -14,6 +14,7 @@ export function ProfilePage({ me }: { me: Me }) {
       <Stack maw={560}>
         <ProfileForm me={me} />
         <PasswordForm />
+        <TelegramForm me={me} />
       </Stack>
     </>
   );
@@ -49,6 +50,89 @@ function ProfileForm({ me }: { me: Me }) {
           </Group>
         </Stack>
       </form>
+    </Paper>
+  );
+}
+
+/** FR-4.2/FR-4.4: діплінк на бота + тумблер сповіщень + тестове повідомлення. */
+function TelegramForm({ me }: { me: Me }) {
+  const qc = useQueryClient();
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [testSent, setTestSent] = useState(false);
+
+  const toggle = useMutation({
+    mutationFn: (telegramEnabled: boolean) => api.patch('/me', { telegramEnabled }),
+    onSuccess: () => {
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Помилка'),
+  });
+
+  const link = useMutation({
+    mutationFn: () => api.post<{ url: string }>('/me/telegram/link'),
+    onSuccess: (r) => {
+      setError(null);
+      setLinkUrl(r.url);
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Помилка'),
+  });
+
+  const test = useMutation({
+    mutationFn: () => api.post('/me/telegram/test'),
+    onSuccess: () => {
+      setError(null);
+      setTestSent(true);
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Помилка'),
+  });
+
+  return (
+    <Paper withBorder p="md" radius="md">
+      <Stack>
+        <Title order={5}>Telegram</Title>
+        <Text size="sm" c="dimmed">
+          Сповіщення про призначені задачі, згадки та заявки з сайту дублюються в Telegram-бота.
+        </Text>
+        {error && (
+          <Alert color="red" variant="light">
+            {error}
+          </Alert>
+        )}
+        <Switch
+          label="Надсилати сповіщення в Telegram"
+          checked={me.telegramEnabled}
+          disabled={toggle.isPending}
+          onChange={(e) => toggle.mutate(e.currentTarget.checked)}
+        />
+        <Group>
+          <Button variant="light" loading={link.isPending} onClick={() => link.mutate()}>
+            Отримати посилання на бота
+          </Button>
+          <Button variant="light" loading={test.isPending} onClick={() => test.mutate()}>
+            Надіслати тестове повідомлення
+          </Button>
+          {testSent && (
+            <Text size="sm" c="green">
+              Надіслано
+            </Text>
+          )}
+        </Group>
+        {linkUrl && (
+          <Stack gap="xs">
+            <Text size="sm">Відкрийте посилання в Telegram і натисніть «Start»:</Text>
+            <Code block>{linkUrl}</Code>
+            <CopyButton value={linkUrl}>
+              {({ copied, copy }) => (
+                <Button size="xs" variant={copied ? 'light' : 'default'} onClick={copy}>
+                  {copied ? 'Скопійовано' : 'Скопіювати посилання'}
+                </Button>
+              )}
+            </CopyButton>
+          </Stack>
+        )}
+      </Stack>
     </Paper>
   );
 }

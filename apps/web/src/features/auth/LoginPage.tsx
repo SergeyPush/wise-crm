@@ -44,7 +44,8 @@ export function LoginPage() {
       <Paper withBorder shadow="sm" p="xl" radius="md" w={400}>
         <form onSubmit={submit}>
           <Stack>
-            <Stack gap={4}>
+            <Stack gap={4} align="center">
+              <img src="/logo.png" alt="WiseCRM" width={48} height={48} style={{ borderRadius: 10, marginBottom: 4 }} />
               <Title order={3}>Вхід до WiseCRM</Title>
               <Text size="sm" c="dimmed">
                 Внутрішня система компанії

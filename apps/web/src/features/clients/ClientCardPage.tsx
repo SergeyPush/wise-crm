@@ -1,6 +1,8 @@
 import {
   Alert,
+  Anchor,
   Badge,
+  Breadcrumbs,
   Button,
   Card,
   Checkbox,
@@ -34,6 +36,7 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
 import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
 import { useCan, useMe } from '../auth/useAuth';
+import { FilesPanel } from '../files/FilesPanel';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
 import { useCompleteTask, useCreateTask, useTasks } from '../tasks/api';
@@ -110,6 +113,16 @@ export function ClientCardPage() {
 
   return (
     <>
+      {/* Не завжди зрозуміло, чи ти зараз на клієнті чи на задачі (feedback 27.08.2026) */}
+      <Breadcrumbs mb="xs">
+        <Anchor component={Link} to="/clients" size="sm" c="dimmed">
+          Клієнти
+        </Anchor>
+        <Text size="sm" c="dimmed">
+          {client.displayName}
+        </Text>
+      </Breadcrumbs>
+
       <PageHeader
         title={client.displayName}
         subtitle={`${CLIENT_TYPE_LABELS[client.type] ?? client.type} · у статусі ${formatRelative(client.statusSince)}`}
@@ -198,7 +211,7 @@ export function ClientCardPage() {
               </Tabs.Panel>
 
               <Tabs.Panel value="files" pt="md">
-                <EmptyState title="Документи — на етапі 4" description="Завантаження файлів зʼявиться разом зі стрічкою й сповіщеннями" />
+                <FilesPanel scope={{ clientId }} />
               </Tabs.Panel>
             </Tabs>
           </Stack>
@@ -329,9 +342,9 @@ const ACTIVITY_LABELS: Record<string, string> = {
   web_lead: 'Заявка з сайту',
   web_lead_duplicate: 'Повторна заявка з сайту',
   web_lead_unmapped_field: 'Не вдалося розпізнати значення поля заявки',
+  file_added: 'Додано документ',
+  file_removed: 'Видалено документ',
 };
-
-const REQUIRES_RESULT = new Set(['CALL', 'PROPOSAL', 'CONTRACT']);
 
 /** Задачі клієнта (FR-3.4) — той самий реєстр дій, що й на загальному екрані «Задачі». */
 function ClientTasksPanel({ clientId }: { clientId: string }) {
@@ -390,13 +403,9 @@ function ClientTasksPanel({ clientId }: { clientId: string }) {
                   <Checkbox
                     aria-label={`Завершити «${task.title}»`}
                     checked={false}
-                    onChange={() => {
-                      if (REQUIRES_RESULT.has(task.type)) {
-                        openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }));
-                      } else {
-                        complete.mutate({ id: task.id });
-                      }
-                    }}
+                    // Той самий openCompleteTaskModal, що й у ПКМ-меню (features/tasks/actions.ts):
+                    // для решти типів форма опційна, а не пропущена мовчки
+                    onChange={() => openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }))}
                   />
                   <Text size="sm">{task.title}</Text>
                 </Group>
