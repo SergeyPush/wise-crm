@@ -1,4 +1,4 @@
-import { Alert, Button, Code, CopyButton, Group, Paper, PasswordInput, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Code, CopyButton, Group, Paper, PasswordInput, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -20,15 +20,35 @@ export function ProfilePage({ me }: { me: Me }) {
   );
 }
 
+// 0-23 за Києвом — той самий діапазон, що й на бекенді (UpdateProfileDto.digestHour)
+const DIGEST_HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: String(h),
+  label: `${String(h).padStart(2, '0')}:00`,
+}));
+
 function ProfileForm({ me }: { me: Me }) {
   const qc = useQueryClient();
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testSent, setTestSent] = useState(false);
   const form = useForm({
-    initialValues: { fullName: me.fullName, phone: me.phone ?? '' },
+    initialValues: { fullName: me.fullName, phone: me.phone ?? '', digestHour: String(me.digestHour) },
   });
 
   const mutation = useMutation({
-    mutationFn: (values: typeof form.values) => api.patch('/me', values),
+    mutationFn: (values: typeof form.values) =>
+      api.patch('/me', { ...values, digestHour: Number(values.digestHour) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
+  });
+
+  // Ручна перевірка каналу, не чекаючи свою digestHour — той самий сенс, що
+  // й «Надіслати тестове повідомлення» у TelegramForm нижче.
+  const sendNow = useMutation({
+    mutationFn: () => api.post('/me/digest/test'),
+    onSuccess: () => {
+      setTestError(null);
+      setTestSent(true);
+    },
+    onError: (e) => setTestError(e instanceof ApiRequestError ? e.message : 'Помилка'),
   });
 
   return (
@@ -38,6 +58,12 @@ function ProfileForm({ me }: { me: Me }) {
           <Title order={5}>Особисті дані</Title>
           <TextInput label="ПІБ" {...form.getInputProps('fullName')} />
           <TextInput label="Телефон" {...form.getInputProps('phone')} />
+          <Select
+            label="Час ранкового дайджесту"
+            description="Лише в будні, і лише якщо є що показати (backlog 27.08.2026)"
+            data={DIGEST_HOUR_OPTIONS}
+            {...form.getInputProps('digestHour')}
+          />
           <Group>
             <Button type="submit" loading={mutation.isPending}>
               Зберегти
@@ -45,6 +71,21 @@ function ProfileForm({ me }: { me: Me }) {
             {mutation.isSuccess && (
               <Text size="sm" c="green">
                 Збережено
+              </Text>
+            )}
+          </Group>
+          {testError && (
+            <Alert color="red" variant="light">
+              {testError}
+            </Alert>
+          )}
+          <Group>
+            <Button type="button" variant="light" loading={sendNow.isPending} onClick={() => sendNow.mutate()}>
+              Надіслати дайджест зараз
+            </Button>
+            {testSent && (
+              <Text size="sm" c="green">
+                Надіслано
               </Text>
             )}
           </Group>

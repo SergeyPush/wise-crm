@@ -68,7 +68,7 @@ describe('Дайджест і прострочені задачі (FR-4.5, FR-4.
     it('порожній дайджест не відправляється (FR-4.5.2)', async () => {
       const user = await makeUser(ctx.prisma);
 
-      await digest.buildAndSendDigest();
+      await digest.buildAndSendDigest(8); // digestHour дефолтний — 8
 
       const notifications = await ctx.prisma.notification.findMany({ where: { userId: user.id, type: 'digest' } });
       expect(notifications).toHaveLength(0);
@@ -84,7 +84,7 @@ describe('Дайджест і прострочені задачі (FR-4.5, FR-4.
       });
       await makeClient(ctx.prisma); // нерозподілений — без assigneeId
 
-      await digest.buildAndSendDigest();
+      await digest.buildAndSendDigest(8); // digestHour дефолтний — 8
 
       const notifications = await ctx.prisma.notification.findMany({ where: { userId: user.id, type: 'digest' } });
       expect(notifications).toHaveLength(1);
@@ -102,13 +102,51 @@ describe('Дайджест і прострочені задачі (FR-4.5, FR-4.
         dueAt: new Date(Date.now() - 24 * 3_600_000),
       });
 
-      await digest.buildAndSendDigest();
+      await digest.buildAndSendDigest(8); // digestHour дефолтний — 8
 
       const summary = await ctx.prisma.notification.findMany({
         where: { userId: admin.id, type: 'leads_inactive_digest' },
       });
       expect(summary).toHaveLength(1);
       expect(summary[0]!.body).toContain('Прострочено всього: 1');
+    });
+
+    it('digestHour за юзером — тік на чужу годину нічого не шле, на свою — шле (backlog 27.08.2026)', async () => {
+      const user = await makeUser(ctx.prisma, { digestHour: 9 });
+      const client = await makeClient(ctx.prisma, { assigneeId: user.id });
+      await makeTask(ctx.prisma, user.id, {
+        clientId: client.id,
+        assigneeId: user.id,
+        dueAt: new Date(Date.now() - 24 * 3_600_000),
+      });
+
+      await digest.buildAndSendDigest(8); // не його година
+      expect(await ctx.prisma.notification.count({ where: { userId: user.id, type: 'digest' } })).toBe(0);
+
+      await digest.buildAndSendDigest(9); // його година
+      expect(await ctx.prisma.notification.count({ where: { userId: user.id, type: 'digest' } })).toBe(1);
+    });
+
+    it('зведення ADMIN рахує всю команду, а не лише тих, у кого digestHour збігається з цим тіком', async () => {
+      const admin = await makeUser(ctx.prisma, { email: 'admin2@test.ua', role: 'ADMIN', digestHour: 8 });
+      // Менеджер налаштував собі інший час — але для зведення ADMIN це не має значення
+      const manager = await makeUser(ctx.prisma, { email: 'manager2@test.ua', digestHour: 14 });
+      const client = await makeClient(ctx.prisma);
+      await makeTask(ctx.prisma, manager.id, {
+        clientId: client.id,
+        assigneeId: manager.id,
+        dueAt: new Date(Date.now() - 24 * 3_600_000),
+      });
+
+      await digest.buildAndSendDigest(8); // лише година адміна
+
+      const summary = await ctx.prisma.notification.findMany({
+        where: { userId: admin.id, type: 'leads_inactive_digest' },
+      });
+      expect(summary).toHaveLength(1);
+      expect(summary[0]!.body).toContain('Прострочено всього: 1');
+      // Самому менеджеру о 8:00 нічого не пішло — це не його година
+      expect(await ctx.prisma.notification.count({ where: { userId: manager.id, type: 'digest' } })).toBe(0);
     });
   });
 });

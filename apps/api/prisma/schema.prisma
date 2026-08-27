@@ -102,6 +102,7 @@ model User {
   role                Role      @default(USER)
   telegramChatId      String?
   telegramEnabled     Boolean   @default(false)
+  digestHour          Int       @default(8) // 0-23 за Києвом, backlog 27.08.2026 (був хардкод 8:00 на всіх)
   mustChangePassword  Boolean   @default(false) // FR-1.3, FR-1.6
   isActive            Boolean   @default(true)
   isProtected         Boolean   @default(false) // FR-1.8: владелец, только CLI
@@ -123,6 +124,7 @@ model User {
   statusChanges       ClientStatusHistory[]
 
   @@index([isActive])
+  @@index([isActive, digestHour]) // щогодинний тік DigestService: хто зараз отримує дайджест
 }
 
 model RefreshToken {
