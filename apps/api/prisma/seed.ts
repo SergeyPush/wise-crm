@@ -56,19 +56,41 @@ const LOST_REASONS = [
   { code: 'OTHER', label: 'Інше', sortOrder: 50 },
 ] as const;
 
-// Рабочая заглушка до ответа заказчика, какие именно значения отдаёт форма
-// сайта (07-open-questions.md, раздел 2; FR-W4). Неизвестное значение не
-// роняет заявку (FR-W2) — оно просто останется немапленным до уточнения.
+// Сверено 27.08.2026 с реальным репозиторием сайту (SergeyPush/wise-expert,
+// components/Calculator/CalculatorForm.tsx, constants/calculator.const.ts) —
+// это больше не заглушка, а точні значення з дропдаунів форми. Неизвестное
+// значение всё равно не роняет заявку (FR-W2) — просто лишається немапленим.
 const WEB_FORM_MAPPINGS = [
   { field: 'OrganisationalForm', rawValue: 'ФОП', targetPath: 'client.type', mappedValue: 'FOP' },
   { field: 'OrganisationalForm', rawValue: 'ТОВ', targetPath: 'client.type', mappedValue: 'COMPANY' },
   { field: 'OrganisationalForm', rawValue: 'інше', targetPath: 'client.type', mappedValue: 'OTHER' },
   { field: 'TaxSystem', rawValue: 'Загальна система', targetPath: 'client.taxSystem', mappedValue: 'GENERAL' },
-  { field: 'TaxSystem', rawValue: 'ЄП 1 група', targetPath: 'client.taxSystem', mappedValue: 'EP1' },
-  { field: 'TaxSystem', rawValue: 'ЄП 2 група', targetPath: 'client.taxSystem', mappedValue: 'EP2' },
-  { field: 'TaxSystem', rawValue: 'ЄП 3 група 5%', targetPath: 'client.taxSystem', mappedValue: 'EP3_5' },
-  { field: 'TaxSystem', rawValue: 'ЄП 3 група 3% + ПДВ', targetPath: 'client.taxSystem', mappedValue: 'EP3_3_VAT' },
-  { field: 'TaxSystem', rawValue: 'ЄП 4 група', targetPath: 'client.taxSystem', mappedValue: 'EP4' },
+  // Сайт не розрізняє групи 1 і не ділить групу 3 на 5%/3%+ПДВ — ПДВ-статус
+  // приходить окремо через AdditionalInfo (isVatPayerFlag), тому EP3_5 тут —
+  // базовий варіант групи 3, а не втрата інформації.
+  { field: 'TaxSystem', rawValue: 'Єдиний податок, 2гр.', targetPath: 'client.taxSystem', mappedValue: 'EP2' },
+  { field: 'TaxSystem', rawValue: 'Єдиний податок, 3гр.', targetPath: 'client.taxSystem', mappedValue: 'EP3_5' },
+  {
+    field: 'TaxSystem',
+    rawValue: 'Податок на виведений капітал',
+    targetPath: 'client.taxSystem',
+    mappedValue: 'WITHDRAWN_CAPITAL_TAX',
+  },
+  // Мультиселект (formatData склеює вибрані варіанти через ', ') — мапиться
+  // токен за токеном у WebLeadsService.mapMultiValueField, тому тут по одному
+  // значенню на рядок, а не комбінації.
+  { field: 'OrganizationalType', rawValue: 'Продажі', targetPath: 'client.businessTypes', mappedValue: 'Продажі' },
+  {
+    field: 'OrganizationalType',
+    rawValue: 'Виробництво',
+    targetPath: 'client.businessTypes',
+    mappedValue: 'Виробництво',
+  },
+  { field: 'OrganizationalType', rawValue: 'Послуги', targetPath: 'client.businessTypes', mappedValue: 'Послуги' },
+  // Обидва варіанти — це «так, є Дія.City», просто різний під-статус;
+  // mappedValue навмисно у форматі, який розуміє toBool() (FR-W4).
+  { field: 'DiyaCity', rawValue: 'startup', targetPath: 'client.isDiiaCity', mappedValue: 'так' },
+  { field: 'DiyaCity', rawValue: 'general_resident', targetPath: 'client.isDiiaCity', mappedValue: 'так' },
 ] as const;
 
 const APP_SETTINGS = [
@@ -153,7 +175,7 @@ async function main(): Promise<void> {
   console.log(`  статуси: ${STATUSES.length}, типи задач: ${TASK_TYPES.length}`);
   console.log(`  категорії документів: ${DOCUMENT_CATEGORIES.length}`);
   console.log(`  джерела: ${LEAD_SOURCES.length}, причини відмови: ${LOST_REASONS.length}`);
-  console.log(`  мапінг веб-форми: ${WEB_FORM_MAPPINGS.length} (заглушка до 07-open-questions.md)`);
+  console.log(`  мапінг веб-форми: ${WEB_FORM_MAPPINGS.length} (звірено з реальною формою сайту 27.08.2026)`);
   console.log(`  налаштування: ${APP_SETTINGS.length}`);
 }
 

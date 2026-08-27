@@ -40,6 +40,7 @@ enum TaxSystem {
   EP3_5
   EP3_3_VAT
   EP4
+  WITHDRAWN_CAPITAL_TAX // Податок на виведений капітал — реальна опція форми сайту (27.08.2026)
 }
 
 enum Stage {

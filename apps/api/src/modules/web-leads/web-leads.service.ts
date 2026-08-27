@@ -228,10 +228,19 @@ export class WebLeadsService {
     }
 
     const unmapped: Array<{ field: string; rawValue: string }> = [];
-    const [type, taxSystem, businessTypesRaw] = await Promise.all([
+    const [type, taxSystem, businessTypesRaw, diyaCityRaw] = await Promise.all([
       this.mapKnownField(tx, 'OrganisationalForm', body.OrganisationalForm, unmapped),
       this.mapKnownField(tx, 'TaxSystem', body.TaxSystem, unmapped),
-      this.mapKnownField(tx, 'OrganizationalType', body.OrganizationalType, unmapped),
+      // Мультиселект на сайті: formatData() склеює вибрані варіанти через ', ' —
+      // мапити треба токен за токеном, інакше кожна комбінація потребувала б
+      // окремого рядка в WebFormMapping.
+      this.mapMultiValueField(tx, 'OrganizationalType', body.OrganizationalType, unmapped),
+      // FR-W4: раніше isDiiaCity рахувався напряму з body.DiyaCity через toBool(),
+      // а сайт шле коди 'startup'/'general_resident' — жоден з них не збігався
+      // з очікуваними рядками ('так'/'yes'/...), тому прапорець завжди був false.
+      // Тепер іде тим самим шляхом мапінгу, що й решта полів (спостережуваність
+      // невідомих значень безкоштовно додається).
+      this.mapKnownField(tx, 'DiyaCity', body.DiyaCity, unmapped),
     ]);
 
     const name = stringField(body.name);
@@ -248,7 +257,7 @@ export class WebLeadsService {
         isVatPayer: isVatPayerFlag(body.AdditionalInfo),
         employeeCount: toInt(body.NumberOfEmployees),
         documentsPerMonth: toInt(body.DocumentQuantity),
-        isDiiaCity: toBool(body.DiyaCity),
+        isDiiaCity: toBool(diyaCityRaw ?? undefined),
         businessTypes: businessTypesRaw ? businessTypesRaw.split(',').map((s) => s.trim()).filter(Boolean) : [],
         statusId: defaultStatus.id,
         sourceId: websiteSource.id, // FR-W5: джерело ставить система, не форма
@@ -322,6 +331,30 @@ export class WebLeadsService {
     const mapped = await mapWebFormValue(tx, field, raw);
     if (!mapped) unmapped.push({ field, rawValue: raw }); // FR-W2: значення невідоме, заявка не падає
     return mapped;
+  }
+
+  /**
+   * FR-W4: для мультиселектів сайту (formatData() склеює вибрані варіанти
+   * через ', '). Кожен токен мапиться окремо — комбінація «Продажі,
+   * Виробництво» інакше довелось би заводити як свій рядок у WebFormMapping.
+   * Немаплені токени йдуть в `unmapped` поштучно, а не всією рядком.
+   */
+  private async mapMultiValueField(
+    tx: Prisma.TransactionClient,
+    field: string,
+    rawValue: unknown,
+    unmapped: Array<{ field: string; rawValue: string }>,
+  ): Promise<string | null> {
+    const raw = stringField(rawValue);
+    if (!raw) return null;
+    const tokens = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    const mappedTokens: string[] = [];
+    for (const token of tokens) {
+      const mapped = await mapWebFormValue(tx, field, token);
+      if (mapped) mappedTokens.push(mapped);
+      else unmapped.push({ field, rawValue: token });
+    }
+    return mappedTokens.length ? mappedTokens.join(', ') : null;
   }
 
   private buildDisplayName(type: string | null, phone?: string, email?: string): string {

@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "TaxSystem" ADD VALUE 'WITHDRAWN_CAPITAL_TAX';
