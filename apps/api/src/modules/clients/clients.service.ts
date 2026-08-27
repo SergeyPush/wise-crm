@@ -445,6 +445,24 @@ export class ClientsService {
         },
         tx,
       );
+
+      // FR-4.1: «зміна статусу мого клієнта» — усім відповідальним, крім того,
+      // хто сам змінив статус (не сповіщаємо людину про її власну дію).
+      const assignees = await tx.clientAssignee.findMany({ where: { clientId: id }, select: { userId: true } });
+      for (const assignee of assignees) {
+        if (assignee.userId === actorId) continue;
+        await this.notifications.notifyUser(
+          assignee.userId,
+          {
+            type: 'status_changed',
+            title: `Статус клієнта «${client.displayName}» змінено на «${target.label}»`,
+            entityType: 'client',
+            entityId: id,
+            link: `/clients/${id}`,
+          },
+          tx,
+        );
+      }
     });
 
     return this.get(id);

@@ -244,6 +244,26 @@ describe('Клієнти та воронка (етап 2)', () => {
       expect(audit).toHaveLength(1);
     });
 
+    it('сповіщає відповідального, крім того, хто сам змінив статус (FR-4.1)', async () => {
+      const { agent, user: actor } = await loggedInUser();
+      const other = await makeUser(ctx.prisma, { email: 'assignee@test.ua' });
+      const client = await makeClient(ctx.prisma);
+      await ctx.prisma.clientAssignee.createMany({
+        data: [
+          { clientId: client.id, userId: actor.id, role: 'PRIMARY' },
+          { clientId: client.id, userId: other.id, role: 'SECONDARY' },
+        ],
+      });
+      const inProgress = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'IN_PROGRESS' } });
+
+      await agent.post(`/clients/${client.id}/status`, { statusId: inProgress.id });
+
+      const selfNotified = await ctx.prisma.notification.findMany({ where: { userId: actor.id, type: 'status_changed' } });
+      expect(selfNotified).toHaveLength(0);
+      const otherNotified = await ctx.prisma.notification.findMany({ where: { userId: other.id, type: 'status_changed' } });
+      expect(otherNotified).toHaveLength(1);
+    });
+
     it('«Скасувати» — повторна зміна статусу назад лишає ДВІ записи в аудиті (FR-8.8/FR-7.3)', async () => {
       const { agent } = await loggedInUser();
       const client = await makeClient(ctx.prisma); // стартовий статус NEW

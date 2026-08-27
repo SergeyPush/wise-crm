@@ -16,6 +16,7 @@ import { DictionariesModule } from './modules/dictionaries/dictionaries.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { CommentsModule } from './modules/comments/comments.module';
+import { DigestModule } from './modules/digest/digest.module';
 import { FilesModule } from './modules/files/files.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { WebLeadsModule } from './modules/web-leads/web-leads.module';
@@ -66,6 +67,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     ClientsModule,
     TasksModule,
     CommentsModule,
+    DigestModule,
     FilesModule,
     TelegramModule,
     WebLeadsModule,
