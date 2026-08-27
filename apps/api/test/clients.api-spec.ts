@@ -192,6 +192,32 @@ describe('Клієнти та воронка (етап 2)', () => {
       expect(res.body.notes).toBe('Оновлено');
     });
 
+    it('field_changed пише diff «було/стало», а не лише перелік полів (backlog «Деталізація стрічки»)', async () => {
+      const { agent } = await loggedInUser();
+      const client = await ctx.prisma.client.create({
+        data: { displayName: 'Стара назва', statusId: (await ctx.prisma.clientStatus.findFirstOrThrow({ where: { isDefaultForNew: true } })).id },
+      });
+
+      await agent.patch(`/clients/${client.id}`, { updatedAt: client.updatedAt.toISOString(), displayName: 'Нова назва' });
+
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({ where: { clientId: client.id, type: 'field_changed' } });
+      const changed = (activity.payload as { changed: Array<{ field: string; from: unknown; to: unknown }> }).changed;
+      expect(changed).toContainEqual({ field: 'displayName', from: 'Стара назва', to: 'Нова назва' });
+    });
+
+    it('field_changed не показує поле, надіслане тим самим значенням', async () => {
+      const { agent } = await loggedInUser();
+      const client = await ctx.prisma.client.create({
+        data: { displayName: 'Назва', notes: 'Нотатка', statusId: (await ctx.prisma.clientStatus.findFirstOrThrow({ where: { isDefaultForNew: true } })).id },
+      });
+
+      await agent.patch(`/clients/${client.id}`, { updatedAt: client.updatedAt.toISOString(), displayName: 'Назва', notes: 'Інша нотатка' });
+
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({ where: { clientId: client.id, type: 'field_changed' } });
+      const changed = (activity.payload as { changed: Array<{ field: string }> }).changed;
+      expect(changed.map((c) => c.field)).toEqual(['notes']);
+    });
+
     it('зміна displayName знімає прапор needsQualification (FR-W3)', async () => {
       const { agent } = await loggedInUser();
       const client = await ctx.prisma.client.create({
@@ -238,6 +264,11 @@ describe('Клієнти та воронка (етап 2)', () => {
         where: { clientId: client.id, type: 'status_changed' },
       });
       expect(activity).toHaveLength(1);
+      // Мітки статусу й причини одразу в payload (backlog «Деталізація
+      // стрічки») — фронт не має ще раз лізти у довідники по id.
+      const payload = activity[0]!.payload as { fromLabel: string | null; toLabel: string; reasonLabel: string | null };
+      expect(payload.toLabel).toBe(lost.label);
+      expect(payload.reasonLabel).toBe(reason.label);
       const audit = await ctx.prisma.auditLog.findMany({
         where: { entityId: client.id, action: 'client.status_change' },
       });
