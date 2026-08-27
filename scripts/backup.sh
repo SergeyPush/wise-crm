@@ -37,7 +37,24 @@ docker run --rm -v wise-crm_uploads:/data:ro -v "$DEST":/backup alpine \
 # 3. Конфигурация и состояние окружения — без этого восстановление
 #    возвращает данные, но не тот же compose/nginx/крон, что были на проде.
 cp .env docker-compose.prod.yml "$WORK/"
-{ docker compose -f docker-compose.prod.yml images; crontab -l; ufw status numbered; } > "$WORK/manifest.txt" 2>&1
+# /etc/nginx на этом сервере закрыт для traversal кому угодно, кроме root
+# (drwx------) — deploy прочитать конфиг не может физически. Не тихо теряем,
+# а оставляем видимую пометку: конфиг и так живёт в git (docker/nginx/crm.conf).
+cp /etc/nginx/sites-available/crm.wisexpert.com.ua.conf "$WORK/nginx-crm.conf" 2>/dev/null \
+  || echo "недоступно для deploy (/etc/nginx root-only) — актуальная копия в git: docker/nginx/crm.conf" \
+     > "$WORK/nginx-crm.conf.MISSING"
+
+# Каждый пункт — best-effort: у deploy осознанно нет root/sudo (ufw, крон живёт
+# в /etc/cron.d, а не в личном crontab) — это не повод рвать set'ом -e уже
+# готовый дамп и снапшот uploads. Проверено на реальном сервере 27.08.2026:
+# исходная версия падала именно здесь, а не на дампе/rsync.
+{
+  docker compose -f docker-compose.prod.yml images
+  echo "--- /etc/cron.d/wise-crm-backup ---"
+  cat /etc/cron.d/wise-crm-backup 2>/dev/null || echo "(недоступно)"
+  echo "--- ufw status ---"
+  ufw status numbered 2>&1 || echo "(потрібен root — недоступно для deploy)"
+} > "$WORK/manifest.txt" 2>&1 || true
 
 # 4. Ретеншен: не более трёх суточных копий (решение от 26.08.2026) —
 #    окно восстановления 3 суток, зато диск не улетает за месяц.
