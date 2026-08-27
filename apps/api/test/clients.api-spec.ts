@@ -395,6 +395,59 @@ describe('Клієнти та воронка (етап 2)', () => {
     });
   });
 
+  describe('Контактні особи (FR-2.2.х, backlog «Редагування контактної особи»)', () => {
+    it('додає контакт і пише подію з ПІБ у payload (для стрічки)', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+
+      const res = await agent.post(`/clients/${client.id}/contacts`, { fullName: 'Іван Петренко', phone: '0671234567' });
+
+      expect(res.status).toBe(201);
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({ where: { clientId: client.id, type: 'contact_added' } });
+      expect((activity.payload as { fullName: string }).fullName).toBe('Іван Петренко');
+    });
+
+    it('редагує контакт: змінює лише надіслані поля, лишає diff у стрічці', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      const created = await agent.post(`/clients/${client.id}/contacts`, { fullName: 'Іван Петренко', position: 'Бухгалтер' });
+
+      const res = await agent.patch(`/clients/${client.id}/contacts/${created.body.id}`, { fullName: 'Іван Коваленко' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.fullName).toBe('Іван Коваленко');
+      expect(res.body.position).toBe('Бухгалтер'); // не надіслали — не чіпнулось
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({ where: { clientId: client.id, type: 'field_changed', entityType: 'contact' } });
+      const payload = activity.payload as { changed: Array<{ field: string; from: unknown; to: unknown }>; fullName: string };
+      expect(payload.changed).toContainEqual({ field: 'fullName', from: 'Іван Петренко', to: 'Іван Коваленко' });
+      expect(payload.fullName).toBe('Іван Коваленко');
+    });
+
+    it('видаляє контакт і пише подію з ПІБ', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      const created = await agent.post(`/clients/${client.id}/contacts`, { fullName: 'Іван Петренко' });
+
+      const res = await agent.delete(`/clients/${client.id}/contacts/${created.body.id}`);
+
+      expect(res.status).toBe(200);
+      const remaining = await ctx.prisma.clientContact.findMany({ where: { clientId: client.id } });
+      expect(remaining).toHaveLength(0);
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({ where: { clientId: client.id, type: 'contact_removed' } });
+      expect((activity.payload as { fullName: string }).fullName).toBe('Іван Петренко');
+    });
+
+    it('порожній рядок email — 400 (ContactDto.@IsOptional пропускає лише null/undefined, не ""; тому фронт не шле незаповнені поля взагалі)', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      const created = await agent.post(`/clients/${client.id}/contacts`, { fullName: 'Іван Петренко' });
+
+      const res = await agent.patch(`/clients/${client.id}/contacts/${created.body.id}`, { email: '' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('Теги з ПКМ (FR-8.1)', () => {
     it('додає тег ідемпотентно і пише подію в стрічку', async () => {
       const { agent } = await loggedInUser();

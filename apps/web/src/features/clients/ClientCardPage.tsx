@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Anchor,
   Badge,
@@ -23,9 +24,10 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconArrowLeft, IconPhoneCall, IconPlus, IconUserCheck } from '@tabler/icons-react';
+import { IconArrowLeft, IconPencil, IconPhoneCall, IconPlus, IconUserCheck } from '@tabler/icons-react';
 import { Link, useParams } from '@tanstack/react-router';
 import { useContextMenu } from 'mantine-contextmenu';
 import { useState } from 'react';
@@ -44,7 +46,7 @@ import { useCompleteTask, useCreateTask, useTasks } from '../tasks/api';
 import { useTaskActions } from '../tasks/actions';
 import { openCompleteTaskModal } from '../tasks/TaskModals';
 import { TASK_TYPE_LABELS, TaskItem } from '../tasks/types';
-import { ClientCard } from './types';
+import { ClientCard, ContactRef } from './types';
 
 // Поля блока «Для тарифу» (FR-2.0.5) — чек-лист при WON перевіряє саме їх.
 const TARIFF_FIELDS: Array<{ key: keyof ClientCard; label: string }> = [
@@ -375,13 +377,32 @@ function ClientTasksPanel({ clientId }: { clientId: string }) {
   );
 }
 
+/** ContactDto.email — @IsOptional() пропускає лише null/undefined, а не '':
+ * порожній рядок з незаповненого текстового поля форми долетів би до
+ * @IsEmail() і впав би 400-ю. Незаповнені поля тому не шлються зовсім, а не
+ * шлються порожніми (баг, знайдений 27.08.2026 при додаванні редагування). */
+function cleanContactValues<T extends Record<string, unknown>>(values: T): Partial<T> {
+  const cleaned: Partial<T> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== '') (cleaned as Record<string, unknown>)[key] = value;
+  }
+  return cleaned;
+}
+
+/** Контактні особи клієнта (FR-2.2.х) — перегляд, додавання і (27.08.2026,
+ * backlog) редагування/видалення через модалку по кліку на олівець. Раніше
+ * редагування не було зовсім — на реальному ліді з сайту це не дозволяло
+ * виправити ПІБ, яке форма сайту пише лише в Client.displayName. */
 function ContactsPanel({ client }: { client: ClientCard }) {
   const qc = useQueryClient();
+  const { data: me } = useMe();
+  const can = useCan(me);
   const [adding, setAdding] = useState(false);
-  const form = useForm({ initialValues: { fullName: '', position: '', phone: '', email: '' } });
+  const [editing, setEditing] = useState<ContactRef | null>(null);
+  const form = useForm({ initialValues: { fullName: '', position: '', phone: '', email: '', messenger: '' } });
 
   const addContact = useMutation({
-    mutationFn: (values: typeof form.values) => api.post(`/clients/${client.id}/contacts`, values),
+    mutationFn: (values: typeof form.values) => api.post(`/clients/${client.id}/contacts`, cleanContactValues(values)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['clients', client.id] });
       form.reset();
@@ -396,8 +417,8 @@ function ContactsPanel({ client }: { client: ClientCard }) {
       )}
       {client.contacts.map((c) => (
         <Paper key={c.id} withBorder p="sm" radius="md">
-          <Group justify="space-between">
-            <Stack gap={0}>
+          <Group justify="space-between" wrap="nowrap">
+            <Stack gap={0} style={{ minWidth: 0 }}>
               <Group gap={6}>
                 <Text size="sm" fw={500}>
                   {c.fullName ?? '—'}
@@ -408,10 +429,19 @@ function ContactsPanel({ client }: { client: ClientCard }) {
                 {c.position}
               </Text>
             </Stack>
-            <Text size="sm">{c.phone ?? c.email ?? '—'}</Text>
+            <Group gap="xs" wrap="nowrap">
+              <Text size="sm">{c.phone ?? c.email ?? '—'}</Text>
+              {can('client:update') && (
+                <ActionIcon variant="subtle" color="gray" onClick={() => setEditing(c)}>
+                  <IconPencil size={16} />
+                </ActionIcon>
+              )}
+            </Group>
           </Group>
         </Paper>
       ))}
+
+      {editing && <EditContactModal clientId={client.id} contact={editing} onClose={() => setEditing(null)} />}
 
       {adding ? (
         <Paper withBorder p="sm" radius="md">
@@ -426,6 +456,7 @@ function ContactsPanel({ client }: { client: ClientCard }) {
               <TextInput label="Посада" {...form.getInputProps('position')} />
               <TextInput label="Телефон" {...form.getInputProps('phone')} />
               <TextInput label="Email" {...form.getInputProps('email')} />
+              <TextInput label="Месенджер" {...form.getInputProps('messenger')} />
               <Group>
                 <Button type="submit" size="xs" loading={addContact.isPending}>
                   Зберегти
@@ -443,6 +474,96 @@ function ContactsPanel({ client }: { client: ClientCard }) {
         </Button>
       )}
     </Stack>
+  );
+}
+
+/** Той самий набір полів, що й форма додавання (ContactDto) — редагування і
+ * видалення (з підтвердженням) в одній модалці, без окремого PATCH-конкурентності:
+ * бекенд (`updateContact`) її не вимагає, на відміну від картки клієнта/задачі. */
+function EditContactModal({
+  clientId,
+  contact,
+  onClose,
+}: {
+  clientId: string;
+  contact: ContactRef;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const form = useForm({
+    initialValues: {
+      fullName: contact.fullName ?? '',
+      position: contact.position ?? '',
+      phone: contact.phone ?? '',
+      email: contact.email ?? '',
+      messenger: contact.messenger ?? '',
+      isPrimary: contact.isPrimary,
+    },
+  });
+
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ['clients', clientId] });
+
+  const save = useMutation({
+    mutationFn: (values: typeof form.values) =>
+      api.patch(`/clients/${clientId}/contacts/${contact.id}`, cleanContactValues(values)),
+    onSuccess: () => {
+      invalidate();
+      onClose();
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Помилка'),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => api.delete(`/clients/${clientId}/contacts/${contact.id}`),
+    onSuccess: () => {
+      invalidate();
+      onClose();
+    },
+    onError: (e) =>
+      notifications.show({ color: 'red', message: e instanceof ApiRequestError ? e.message : 'Не вдалося видалити' }),
+  });
+
+  const confirmDelete = () =>
+    modals.openConfirmModal({
+      title: 'Видалити контактну особу?',
+      children: `«${contact.fullName ?? 'без ПІБ'}» зникне з картки клієнта — дію не можна скасувати.`,
+      labels: { confirm: 'Видалити', cancel: 'Відміна' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => remove.mutate(),
+    });
+
+  return (
+    <Modal opened onClose={onClose} title="Контактна особа">
+      <form onSubmit={form.onSubmit((v) => save.mutate(v))}>
+        <Stack>
+          {error && (
+            <Alert color="red" variant="light">
+              {error}
+            </Alert>
+          )}
+          <TextInput label="ПІБ" {...form.getInputProps('fullName')} />
+          <TextInput label="Посада" {...form.getInputProps('position')} />
+          <TextInput label="Телефон" {...form.getInputProps('phone')} />
+          <TextInput label="Email" {...form.getInputProps('email')} />
+          <TextInput label="Месенджер" {...form.getInputProps('messenger')} />
+          <Checkbox
+            label="Основний контакт"
+            checked={form.values.isPrimary}
+            onChange={(e) => form.setFieldValue('isPrimary', e.currentTarget.checked)}
+          />
+          <Group justify="space-between">
+            <Button color="red" variant="subtle" loading={remove.isPending} onClick={confirmDelete}>
+              Видалити
+            </Button>
+            <Button type="submit" loading={save.isPending}>
+              Зберегти
+            </Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
   );
 }
 
