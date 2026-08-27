@@ -51,6 +51,30 @@ export class TelegramService implements OnModuleInit {
       this.botUsername = (await bot.telegram.getMe()).username;
     } catch (err) {
       this.logger.error({ err }, 'Не вдалося отримати профіль бота (getMe) — перевірте токен');
+      return;
+    }
+
+    await this.registerWebhook(bot);
+  }
+
+  /**
+   * Без setWebhook Telegram нікуди не надсилає апдейти — /telegram/webhook
+   * стоїть, але порожній, і діплінк /start (FR-4.2) мовчки не працює.
+   * На localhost реєстрація очікувано провалиться (Telegram вимагає публічний
+   * HTTPS) — це нормальний стан дев-оточення, не привід валити старт застосунку.
+   */
+  private async registerWebhook(bot: Telegraf): Promise<void> {
+    const secret = this.config.get<string>('TELEGRAM_WEBHOOK_SECRET');
+    const appUrl = this.config.get<string>('APP_URL');
+    if (!secret) {
+      this.logger.warn('TELEGRAM_WEBHOOK_SECRET не задано — вихідні сповіщення працюють, /start діплінк — ні');
+      return;
+    }
+    try {
+      await bot.telegram.setWebhook(`${appUrl}/api/v1/telegram/webhook`, { secret_token: secret });
+      this.logger.log(`Telegram webhook зареєстровано: ${appUrl}/api/v1/telegram/webhook`);
+    } catch (err) {
+      this.logger.warn({ err }, 'Не вдалося зареєструвати Telegram webhook (очікувано на localhost)');
     }
   }
 

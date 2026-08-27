@@ -48,6 +48,14 @@ export class EnvConfig {
   @IsString()
   @IsOptional()
   TELEGRAM_BOT_TOKEN?: string;
+
+  @IsString()
+  @IsOptional()
+  TELEGRAM_WEBHOOK_SECRET?: string;
+
+  @IsString()
+  @IsOptional()
+  ALERT_TELEGRAM_CHAT_ID?: string;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvConfig {
