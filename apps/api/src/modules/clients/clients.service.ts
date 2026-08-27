@@ -7,7 +7,7 @@ import { AppException } from '../../common/app.exception';
 import { PaginationQueryDto, paginated } from '../../common/dto/pagination.dto';
 import { normalizePhone } from '../../common/utils/phone.util';
 import { isValidEdrpou, isValidRnokpp } from '../../common/utils/validators.util';
-import { ActivityService } from '../activity/activity.service';
+import { ActivityService, diffChanged } from '../activity/activity.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -224,10 +224,11 @@ export class ClientsService {
           'Дані змінено іншим користувачем, оновіть сторінку',
         );
       }
-      await this.activity.log(
-        { clientId: id, actorId, type: 'field_changed', payload: { changed: Object.keys(rest) } },
-        tx,
-      );
+      // Backlog «Деталізація стрічки активності»: diff по значеннях, а не
+      // лише перелік імен полів — current уже під рукою (fetched вище), data
+      // містить фінальні (сконвертовані) значення, що йдуть у БД.
+      const changed = diffChanged(Object.keys(data), current as unknown as Record<string, unknown>, data as Record<string, unknown>);
+      await this.activity.log({ clientId: id, actorId, type: 'field_changed', payload: { changed } }, tx);
     });
 
     return this.get(id);
@@ -411,6 +412,14 @@ export class ClientsService {
       throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Вкажіть причину');
     }
 
+    // Мітки — одразу в payload, а не lookup з фронту по id: стрічка активності
+    // (backlog «Деталізація стрічки») має лишатись читабельною, навіть якщо
+    // статус чи причину пізніше перейменують або видалять.
+    const [fromStatus, reason] = await Promise.all([
+      this.prisma.clientStatus.findUnique({ where: { id: client.statusId } }),
+      dto.reasonId ? this.prisma.lostReason.findUnique({ where: { id: dto.reasonId } }) : null,
+    ]);
+
     await this.prisma.$transaction(async (tx) => {
       await tx.clientStatusHistory.create({
         data: {
@@ -428,7 +437,15 @@ export class ClientsService {
           clientId: id,
           actorId,
           type: 'status_changed',
-          payload: { fromId: client.statusId, toId: dto.statusId, reasonId: dto.reasonId ?? null },
+          payload: {
+            fromId: client.statusId,
+            toId: dto.statusId,
+            reasonId: dto.reasonId ?? null,
+            fromLabel: fromStatus?.label ?? null,
+            toLabel: target.label,
+            reasonLabel: reason?.label ?? null,
+            comment: dto.comment ?? null,
+          },
         },
         tx,
       );
@@ -526,7 +543,12 @@ export class ClientsService {
       const contact = await tx.clientContact.create({
         data: { ...dto, clientId, phoneNormalized: normalizePhone(dto.phone) },
       });
-      await this.activity.log({ clientId, actorId, type: 'contact_added', entityType: 'contact', entityId: contact.id }, tx);
+      // fullName у payload — стрічка (backlog «Деталізація») інакше не могла б
+      // показати, яку саме контактну особу додано: сама подія лише має entityId.
+      await this.activity.log(
+        { clientId, actorId, type: 'contact_added', entityType: 'contact', entityId: contact.id, payload: { fullName: contact.fullName } },
+        tx,
+      );
       return contact;
     });
   }
@@ -539,11 +561,20 @@ export class ClientsService {
       if (dto.isPrimary) {
         await tx.clientContact.updateMany({ where: { clientId }, data: { isPrimary: false } });
       }
-      const updated = await tx.clientContact.update({
-        where: { id: contactId },
-        data: { ...dto, ...(dto.phone !== undefined ? { phoneNormalized: normalizePhone(dto.phone) } : {}) },
-      });
-      await this.activity.log({ clientId, actorId, type: 'field_changed', entityType: 'contact', entityId: contactId }, tx);
+      const data = { ...dto, ...(dto.phone !== undefined ? { phoneNormalized: normalizePhone(dto.phone) } : {}) };
+      const updated = await tx.clientContact.update({ where: { id: contactId }, data });
+      const changed = diffChanged(Object.keys(dto), contact as unknown as Record<string, unknown>, data as Record<string, unknown>);
+      await this.activity.log(
+        {
+          clientId,
+          actorId,
+          type: 'field_changed',
+          entityType: 'contact',
+          entityId: contactId,
+          payload: { changed, fullName: updated.fullName ?? contact.fullName },
+        },
+        tx,
+      );
       return updated;
     });
   }
@@ -553,7 +584,14 @@ export class ClientsService {
     if (!contact) throw new AppException(404, ErrorCode.NOT_FOUND, 'Контакт не знайдено');
 
     await this.prisma.clientContact.delete({ where: { id: contactId } });
-    await this.activity.log({ clientId, actorId, type: 'contact_removed', entityType: 'contact', entityId: contactId });
+    await this.activity.log({
+      clientId,
+      actorId,
+      type: 'contact_removed',
+      entityType: 'contact',
+      entityId: contactId,
+      payload: { fullName: contact.fullName },
+    });
     return { ok: true };
   }
 

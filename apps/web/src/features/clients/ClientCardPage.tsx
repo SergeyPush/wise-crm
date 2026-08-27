@@ -19,7 +19,6 @@ import {
   Text,
   Textarea,
   TextInput,
-  Timeline,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -36,6 +35,7 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
 import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
 import { useCan, useMe } from '../auth/useAuth';
+import { ActivityFeed } from '../activity/ActivityFeed';
 import { FilesPanel } from '../files/FilesPanel';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
@@ -284,67 +284,6 @@ function Field({
     </Grid.Col>
   );
 }
-
-function ActivityFeed({ clientId }: { clientId: string }) {
-  const query = useQuery({
-    queryKey: ['clients', clientId, 'activity'],
-    queryFn: () =>
-      api.get<{ items: Array<{ id: string; type: string; createdAt: string; actor: { fullName: string } | null; payload: unknown }> }>(
-        `/clients/${clientId}/activity`,
-      ),
-  });
-
-  if (query.isLoading) {
-    return (
-      <Group justify="center" py="md">
-        <Loader size="sm" />
-      </Group>
-    );
-  }
-
-  const items = query.data?.items ?? [];
-  if (items.length === 0) {
-    return <EmptyState title="Стрічка порожня" description="Тут зʼявляться зміни статусу, коментарі та задачі" />;
-  }
-
-  return (
-    <Paper withBorder p="md" radius="md">
-      <Timeline bulletSize={16} lineWidth={2}>
-        {items.map((e) => (
-          <Timeline.Item key={e.id} title={ACTIVITY_LABELS[e.type] ?? e.type}>
-            <Text size="xs" c="dimmed">
-              {e.actor?.fullName ?? 'Система'} · {formatRelative(e.createdAt)}
-            </Text>
-          </Timeline.Item>
-        ))}
-      </Timeline>
-    </Paper>
-  );
-}
-
-const ACTIVITY_LABELS: Record<string, string> = {
-  client_created: 'Клієнта створено',
-  field_changed: 'Змінено поля картки',
-  status_changed: 'Змінено статус',
-  assignee_changed: 'Змінено відповідального',
-  contact_logged: 'Зафіксовано контакт',
-  contact_added: 'Додано контактну особу',
-  contact_removed: 'Видалено контактну особу',
-  comment: 'Додано коментар',
-  tag_added: 'Додано тег',
-  tag_removed: 'Видалено тег',
-  task_created: 'Поставлено задачу',
-  task_updated: 'Змінено задачу',
-  task_completed: 'Завершено задачу',
-  task_cancelled: 'Скасовано задачу',
-  task_snoozed: 'Перенесено термін задачі',
-  task_reassigned: 'Перепризначено задачу',
-  web_lead: 'Заявка з сайту',
-  web_lead_duplicate: 'Повторна заявка з сайту',
-  web_lead_unmapped_field: 'Не вдалося розпізнати значення поля заявки',
-  file_added: 'Додано документ',
-  file_removed: 'Видалено документ',
-};
 
 /** Задачі клієнта (FR-3.4) — той самий реєстр дій, що й на загальному екрані «Задачі». */
 function ClientTasksPanel({ clientId }: { clientId: string }) {

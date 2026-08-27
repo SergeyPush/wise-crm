@@ -202,6 +202,22 @@ describe('Задачі (етап 3)', () => {
     });
   });
 
+  describe('Деталізація стрічки активності (backlog)', () => {
+    it('task_updated пише diff «було/стало», а не лише перелік полів', async () => {
+      const { agent, user } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      const task = await makeTask(ctx.prisma, user.id, { clientId: client.id, title: 'Стара назва' });
+
+      await agent.patch(`/tasks/${task.id}`, { updatedAt: task.updatedAt.toISOString(), title: 'Нова назва' });
+
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({
+        where: { clientId: client.id, type: 'task_updated' },
+      });
+      const changed = (activity.payload as { changed: Array<{ field: string; from: unknown; to: unknown }> }).changed;
+      expect(changed).toContainEqual({ field: 'title', from: 'Стара назва', to: 'Нова назва' });
+    });
+  });
+
   describe("Видалення — м'яке, автор або ADMIN (FR-3.8)", () => {
     it('стороння людина (USER) видалити чужу задачу не може — 403', async () => {
       const { user: author } = await loggedInUser('author4@test.ua');
