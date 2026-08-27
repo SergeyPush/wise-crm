@@ -25,6 +25,7 @@ export class DictionariesController {
 
   @Patch(':kind/:id')
   @RequirePermission('dictionary:manage')
+  @ApiOperation({ summary: 'Ще й statuses — але лише name/color/sortOrder, без create (backlog 27.08.2026)' })
   update(@Param('kind') kind: string, @Param('id') id: string, @Body() dto: UpsertDictionaryEntryDto) {
     return this.dictionaries.update(kind, id, dto);
   }

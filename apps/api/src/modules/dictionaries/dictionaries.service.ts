@@ -14,12 +14,25 @@ export const DICTIONARY_KINDS = [
 ] as const;
 export type DictionaryKind = (typeof DICTIONARY_KINDS)[number];
 
-/** Три из шести справочников редактируются через интерфейс (раздел 3 плана). */
-const EDITABLE_KINDS = ['lead-sources', 'lost-reasons', 'tags'] as const;
-type EditableKind = (typeof EDITABLE_KINDS)[number];
+/** Три из шести справочников создаются и редактируются через интерфейс (раздел 3 плана). */
+const CREATABLE_KINDS = ['lead-sources', 'lost-reasons', 'tags'] as const;
+type CreatableKind = (typeof CREATABLE_KINDS)[number];
 
-function assertEditable(kind: string): asserts kind is EditableKind {
-  if (!(EDITABLE_KINDS as readonly string[]).includes(kind)) {
+// Статуси клієнтів (backlog 27.08.2026): додавати/видаляти не можна — це
+// зачіпає воронку і звітність на дашборді (dashboard.service.ts шукає
+// clientStatus за `code`, web-leads.service.ts — за `isDefaultForNew`), тому
+// лише PATCH, і тільки для полів, які не впливають на логіку (див. update()).
+const UPDATABLE_KINDS = [...CREATABLE_KINDS, 'statuses'] as const;
+type UpdatableKind = (typeof UPDATABLE_KINDS)[number];
+
+function assertCreatable(kind: string): asserts kind is CreatableKind {
+  if (!(CREATABLE_KINDS as readonly string[]).includes(kind)) {
+    throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Цей довідник редагується тільки міграцією');
+  }
+}
+
+function assertUpdatable(kind: string): asserts kind is UpdatableKind {
+  if (!(UPDATABLE_KINDS as readonly string[]).includes(kind)) {
     throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Цей довідник редагується тільки міграцією');
   }
 }
@@ -51,7 +64,7 @@ export class DictionariesService {
   }
 
   async create(kind: string, dto: UpsertDictionaryEntryDto) {
-    assertEditable(kind);
+    assertCreatable(kind);
     if (kind === 'tags') {
       if (!dto.name) throw new AppException(400, ErrorCode.VALIDATION_FAILED, "Поле «name» обов'язкове");
       return this.prisma.tag.create({ data: { name: dto.name, color: dto.color ?? 'gray' } });
@@ -66,11 +79,27 @@ export class DictionariesService {
   }
 
   async update(kind: string, id: string, dto: UpsertDictionaryEntryDto) {
-    assertEditable(kind);
+    assertUpdatable(kind);
     if (kind === 'tags') {
       const tag = await this.prisma.tag.findUnique({ where: { id } });
       if (!tag) throw new AppException(404, ErrorCode.NOT_FOUND, 'Тег не знайдено');
       return this.prisma.tag.update({ where: { id }, data: { name: dto.name, color: dto.color } });
+    }
+    if (kind === 'statuses') {
+      const status = await this.prisma.clientStatus.findUnique({ where: { id } });
+      if (!status) throw new AppException(404, ErrorCode.NOT_FOUND, 'Статус не знайдено');
+      // code/stage/isTerminal/requiresReason/isDefaultForNew/isActive критичні
+      // для логіки воронки й хардкод-пошуків (dashboard.service.ts:
+      // code === 'PROPOSAL_SENT', web-leads.service.ts: isDefaultForNew) —
+      // з UI можна міняти лише те, що не читає бекенд-логіка: назву, колір, порядок.
+      return this.prisma.clientStatus.update({
+        where: { id },
+        data: {
+          label: dto.label ?? status.label,
+          color: dto.color ?? status.color,
+          sortOrder: dto.sortOrder ?? status.sortOrder,
+        },
+      });
     }
 
     const model = kind === 'lead-sources' ? this.prisma.leadSource : this.prisma.lostReason;
