@@ -1,7 +1,10 @@
 node_modules
 **/node_modules
 **/dist
-**/public
+# Только сгенерированный локально apps/api/public (копия web/dist для ручных
+# прогонов) — НЕ apps/web/public: там реальные исходники (лого, favicon),
+# которые Vite обязан скопировать в dist при сборке внутри образа.
+apps/api/public
 .git
 docs
 e2e
