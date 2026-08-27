@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { validateEnv } from './config/env';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { AlertsModule } from './common/alerts/alerts.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { MeModule } from './modules/me/me.module';
@@ -22,6 +23,7 @@ import { ExportModule } from './modules/export/export.module';
 import { FilesModule } from './modules/files/files.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { WebLeadsModule } from './modules/web-leads/web-leads.module';
+import { ClientErrorsModule } from './modules/client-errors/client-errors.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -61,6 +63,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     ScheduleModule.forRoot(),
     PrismaModule,
     AuditModule,
+    AlertsModule,
     AuthModule,
     UsersModule,
     MeModule,
@@ -75,6 +78,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     FilesModule,
     TelegramModule,
     WebLeadsModule,
+    ClientErrorsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

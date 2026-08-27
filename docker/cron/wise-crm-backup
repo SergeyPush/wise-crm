@@ -1,0 +1,5 @@
+# 04-deployment.md, раздел «Бэкапы: два слоя».
+# Устанавливается на сервере: sudo cp docker/cron/wise-crm-backup /etc/cron.d/wise-crm-backup
+# nice/ionice — единственное ядро на VPS не должно конкурировать с ночными запросами.
+0 3 * * *  deploy nice -n 19 ionice -c3 /opt/wise-crm/scripts/backup.sh       >> /var/log/wise-crm-backup.log  2>&1
+30 4 * * 0 deploy /opt/wise-crm/scripts/restore-test.sh                       >> /var/log/wise-crm-restore.log 2>&1

@@ -15,6 +15,20 @@ import 'mantine-datatable/styles.css';
 import { theme } from './theme';
 import { router } from './router';
 import { queryClient } from './lib/query';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { reportClientError } from './lib/report-error';
+
+// NFR-32.2: помилки поза React-деревом (обробники подій, async-код, помилки
+// завантаження чанків) не ловить ErrorBoundary — тільки ці два глобальні слухачі.
+window.addEventListener('error', (event) => {
+  reportClientError(event.message, { stack: event.error?.stack });
+});
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  reportClientError(reason instanceof Error ? reason.message : String(reason), {
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -23,7 +37,9 @@ createRoot(document.getElementById('root')!).render(
         <ModalsProvider>
           <ContextMenuProvider>
             <Notifications position="top-right" />
-            <RouterProvider router={router} />
+            <AppErrorBoundary>
+              <RouterProvider router={router} />
+            </AppErrorBoundary>
           </ContextMenuProvider>
         </ModalsProvider>
       </QueryClientProvider>

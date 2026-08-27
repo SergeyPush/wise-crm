@@ -34,6 +34,11 @@ COPY --from=build  /app/apps/api/dist   ./dist
 COPY --from=build  /app/apps/api/prisma ./prisma
 COPY --from=build  /app/apps/web/dist   ./public
 COPY --from=prune  /out/node_modules    ./node_modules
+# `pnpm deploy --prod` переустанавливает @prisma/client «с нуля» из реестра —
+# сгенерированный в стадии build клиент (node_modules/.prisma/client) при этом
+# теряется, и PrismaService падает с «did not initialize yet» уже в проде.
+# Перегенерировать здесь дешевле, чем городить отдельное копирование каталога.
+RUN node node_modules/prisma/build/index.js generate --schema=./prisma/schema.prisma
 # Том uploads монтируется сюда: каталог должен существовать и принадлежать app,
 # иначе docker создаст его от root и первая же загрузка упадёт с EACCES
 RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
