@@ -37,3 +37,16 @@ export const SNOOZE_PRESET_LABELS: Record<SnoozePreset, string> = {
   nextweek: 'Наступний тиждень',
   custom: 'Обрати дату…',
 };
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  LOW: 'Низький',
+  NORMAL: 'Звичайний',
+  HIGH: 'Високий',
+};
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  OPEN: 'Відкрита',
+  IN_PROGRESS: 'У роботі',
+  DONE: 'Завершена',
+  CANCELLED: 'Скасована',
+};

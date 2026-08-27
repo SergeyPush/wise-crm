@@ -3,10 +3,25 @@ import { CSRF_HEADER } from 'shared';
 import { ApiRequestError, BASE, api, csrfToken } from '../../lib/api';
 import { FileItem } from './types';
 
-export function useFiles(clientId: string) {
+/**
+ * Клієнт бачить усі документи, незалежно від того, до якої задачі прикріплені
+ * (FR-F2) — тому `clientId`; задача бачить лише свої власні вкладення —
+ * тому пряма пара `entityType`+`entityId`.
+ */
+export type FileScope = { clientId: string } | { entityType: 'task'; entityId: string };
+
+function scopeKey(scope: FileScope): string {
+  return 'clientId' in scope ? `client:${scope.clientId}` : `${scope.entityType}:${scope.entityId}`;
+}
+
+function scopeQuery(scope: FileScope): string {
+  return 'clientId' in scope ? `clientId=${scope.clientId}` : `entityType=${scope.entityType}&entityId=${scope.entityId}`;
+}
+
+export function useFiles(scope: FileScope) {
   return useQuery({
-    queryKey: ['files', 'client', clientId],
-    queryFn: () => api.get<FileItem[]>(`/files?clientId=${clientId}`),
+    queryKey: ['files', scopeKey(scope)],
+    queryFn: () => api.get<FileItem[]>(`/files?${scopeQuery(scope)}`),
   });
 }
 
@@ -37,7 +52,7 @@ async function uploadOne(file: File, fields: UploadFields): Promise<FileItem> {
   return payload as FileItem;
 }
 
-export function useUploadFiles(clientId: string) {
+export function useUploadFiles(scope: FileScope) {
   const qc = useQueryClient();
   return useMutation({
     // Кожен файл — окремий запит, результати незалежні: один поганий файл
@@ -47,15 +62,15 @@ export function useUploadFiles(clientId: string) {
       const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
       return { succeeded: results.length - failed.length, failed };
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['files', 'client', clientId] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['files', scopeKey(scope)] }),
   });
 }
 
-export function useDeleteFile(clientId: string) {
+export function useDeleteFile(scope: FileScope) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/files/${id}`),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['files', 'client', clientId] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['files', scopeKey(scope)] }),
   });
 }
 

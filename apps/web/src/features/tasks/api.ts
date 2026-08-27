@@ -15,6 +15,7 @@ export type TaskFilters = {
   status?: string; // "OPEN,IN_PROGRESS"
   dueBefore?: string;
   limit?: number;
+  sort?: string; // "-updatedAt"
 };
 
 function toQuery(filters: TaskFilters): string {
@@ -30,6 +31,14 @@ export function useTasks(filters: TaskFilters) {
   return useQuery({
     queryKey: ['tasks', 'list', filters],
     queryFn: () => api.get<Paginated<TaskItem>>(`/tasks${toQuery({ limit: 200, ...filters })}`),
+  });
+}
+
+/** Картка задачі (`/tasks/:id`) — той самий ендпоінт, на який веде посилання з Telegram-сповіщень. */
+export function useTask(id: string) {
+  return useQuery({
+    queryKey: ['tasks', 'detail', id],
+    queryFn: () => api.get<TaskItem>(`/tasks/${id}`),
   });
 }
 

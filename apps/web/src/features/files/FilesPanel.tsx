@@ -9,23 +9,24 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
 import { formatRelative } from '../../lib/format';
 import { useMe } from '../auth/useAuth';
-import { downloadUrl, useDeleteFile, useFiles, useUploadFiles } from './api';
+import { FileScope, downloadUrl, useDeleteFile, useFiles, useUploadFiles } from './api';
 import { DocumentCategoryEntry, FileItem } from './types';
 
-/** «Документи» на картці клієнта (FR-F1–F15) — drag-n-drop, категорія, версії, видалення. */
-export function FilesPanel({ clientId }: { clientId: string }) {
+/** «Документи» на картці клієнта і на картці задачі (FR-F1–F15) — drag-n-drop, категорія, версії, видалення. */
+export function FilesPanel({ scope }: { scope: FileScope }) {
   const { data: me } = useMe();
-  const query = useFiles(clientId);
+  const query = useFiles(scope);
   const categories = useQuery({
     queryKey: ['dictionaries', 'document-categories'],
     queryFn: () => api.get<DocumentCategoryEntry[]>('/dictionaries/document-categories'),
   });
-  const upload = useUploadFiles(clientId);
-  const remove = useDeleteFile(clientId);
+  const upload = useUploadFiles(scope);
+  const remove = useDeleteFile(scope);
+  const uploadTarget = 'clientId' in scope ? { entityType: 'client' as const, entityId: scope.clientId } : scope;
 
   const handleDrop = (files: File[], categoryId?: string) => {
     upload.mutate(
-      { files, fields: { entityType: 'client', entityId: clientId, categoryId } },
+      { files, fields: { ...uploadTarget, categoryId } },
       {
         onSuccess: ({ succeeded, failed }) => {
           const firstFailure = failed[0];

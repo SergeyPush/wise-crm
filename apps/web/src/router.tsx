@@ -7,6 +7,7 @@ import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
 import { ClientCardPage } from './features/clients/ClientCardPage';
 import { TasksPage } from './features/tasks/TasksPage';
+import { TaskCardPage } from './features/tasks/TaskCardPage';
 import { UsersPage } from './features/users/UsersPage';
 import { DictionariesPage } from './features/dictionaries/DictionariesPage';
 
@@ -49,6 +50,12 @@ const tasksRoute = createRoute({
   component: () => <RequireAuth>{() => <TasksPage />}</RequireAuth>,
 });
 
+const taskCardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tasks/$taskId',
+  component: () => <RequireAuth>{() => <TaskCardPage />}</RequireAuth>,
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
@@ -74,6 +81,7 @@ const routeTree = rootRoute.addChildren([
   clientsRoute,
   clientCardRoute,
   tasksRoute,
+  taskCardRoute,
   profileRoute,
   usersRoute,
   dictionariesRoute,

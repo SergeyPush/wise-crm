@@ -15,20 +15,20 @@ import { useCompleteTask, useCreateTask, useTasks } from './api';
 import { GROUP_COLLAPSED_BY_DEFAULT, GROUP_LABELS, GROUP_ORDER, groupTasks } from './group';
 import { useTaskActions } from './actions';
 import { openCompleteTaskModal } from './TaskModals';
-import { TASK_TYPE_LABELS, TaskItem } from './types';
+import { TASK_STATUS_LABELS, TASK_TYPE_LABELS, TaskItem } from './types';
 
-type Tab = 'mine' | 'all';
-const REQUIRES_RESULT = new Set(['CALL', 'PROPOSAL', 'CONTRACT']);
+type Tab = 'mine' | 'all' | 'done';
 
 export function TasksPage() {
   const [tab, setTab] = useState<Tab>('mine');
   const [quickTitle, setQuickTitle] = useState('');
   const createTask = useCreateTask();
 
-  const query = useTasks({
-    assigneeId: tab === 'mine' ? 'me' : undefined,
-    status: 'OPEN,IN_PROGRESS',
-  });
+  const query = useTasks(
+    tab === 'done'
+      ? { assigneeId: undefined, status: 'DONE,CANCELLED', sort: '-updatedAt' }
+      : { assigneeId: tab === 'mine' ? 'me' : undefined, status: 'OPEN,IN_PROGRESS' },
+  );
 
   const groups = useMemo(() => groupTasks(query.data?.items ?? []), [query.data]);
 
@@ -43,28 +43,31 @@ export function TasksPage() {
           data={[
             { value: 'mine', label: 'Мої' },
             { value: 'all', label: 'Всі' },
+            { value: 'done', label: 'Завершені' },
           ]}
-          w={200}
+          w={280}
         />
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const title = quickTitle.trim();
-            if (!title) return;
-            createTask.mutate(
-              { title },
-              { onSuccess: () => setQuickTitle('') },
-            );
-          }}
-        >
-          <TextInput
-            placeholder="Що зробити? Enter → задача на себе, сьогодні"
-            value={quickTitle}
-            onChange={(e) => setQuickTitle(e.currentTarget.value)}
-            disabled={createTask.isPending}
-          />
-        </form>
+        {tab !== 'done' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const title = quickTitle.trim();
+              if (!title) return;
+              createTask.mutate(
+                { title },
+                { onSuccess: () => setQuickTitle('') },
+              );
+            }}
+          >
+            <TextInput
+              placeholder="Що зробити? Enter → задача на себе, сьогодні. Клієнта можна прилінкувати, відкривши задачу"
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.currentTarget.value)}
+              disabled={createTask.isPending}
+            />
+          </form>
+        )}
 
         {query.isLoading ? (
           <Group justify="center" py="xl">
@@ -79,8 +82,22 @@ export function TasksPage() {
         ) : !query.data || query.data.items.length === 0 ? (
           <EmptyState
             title="Задач немає"
-            description={tab === 'mine' ? 'Усі ваші задачі виконано — гарний знак' : 'У системі поки немає відкритих задач'}
+            description={
+              tab === 'done'
+                ? 'Завершених і скасованих задач ще немає'
+                : tab === 'mine'
+                  ? 'Усі ваші задачі виконано — гарний знак'
+                  : 'У системі поки немає відкритих задач'
+            }
           />
+        ) : tab === 'done' ? (
+          // Завершені/скасовані — плоский список: групування за строком (FR overdue/сьогодні)
+          // тут вводить в оману, задача вже позаду
+          <Paper withBorder radius="md">
+            {query.data.items.map((task, index) => (
+              <TaskRow key={task.id} task={task} isFirst={index === 0} showStatus />
+            ))}
+          </Paper>
         ) : (
           <Stack gap="md">
             {GROUP_ORDER.map((group) => {
@@ -140,7 +157,7 @@ function TaskGroupSection({
   );
 }
 
-function TaskRow({ task, isFirst }: { task: TaskItem; isFirst: boolean }) {
+function TaskRow({ task, isFirst, showStatus }: { task: TaskItem; isFirst: boolean; showStatus?: boolean }) {
   const { data: me } = useMe();
   const navigate = useNavigate();
   const { showContextMenu } = useContextMenu();
@@ -163,32 +180,44 @@ function TaskRow({ task, isFirst }: { task: TaskItem; isFirst: boolean }) {
       }}
     >
       <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-        <Checkbox
-          aria-label={`Завершити «${task.title}»`}
-          checked={false}
-          onChange={() => {
-            // FR-3.5: для ДЗВІНОК/КП/ДОГОВІР результат обов'язковий — питаємо; решта закривається одразу
-            if (REQUIRES_RESULT.has(task.type)) {
-              openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }));
-            } else {
-              complete.mutate({ id: task.id });
-            }
-          }}
-        />
+        {!showStatus && (
+          // Той самий openCompleteTaskModal, що й у ПКМ-меню: для типів без
+          // обов'язкового результату форма опційна, а не пропущена мовчки
+          <Checkbox
+            aria-label={`Завершити «${task.title}»`}
+            checked={false}
+            onChange={() => openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }))}
+          />
+        )}
         <Stack gap={0} style={{ minWidth: 0 }}>
           <Text
             size="sm"
-            style={task.client ? { cursor: 'pointer' } : undefined}
-            onClick={() => task.client && void navigate({ to: '/clients/$clientId', params: { clientId: task.client.id } })}
+            style={{ cursor: 'pointer' }}
+            onClick={() => void navigate({ to: '/tasks/$taskId', params: { taskId: task.id } })}
           >
             {task.title}
           </Text>
-          <Text size="xs" c="dimmed" truncate>
+          <Text
+            size="xs"
+            c="dimmed"
+            truncate
+            style={task.client ? { cursor: 'pointer' } : undefined}
+            onClick={(e) => {
+              if (!task.client) return;
+              e.stopPropagation();
+              void navigate({ to: '/clients/$clientId', params: { clientId: task.client.id } });
+            }}
+          >
             {task.client?.displayName ?? '—'}
           </Text>
         </Stack>
       </Group>
       <Group gap="xs" wrap="nowrap">
+        {showStatus && (
+          <Badge size="sm" variant="light" color={task.status === 'CANCELLED' ? 'gray' : 'green'}>
+            {TASK_STATUS_LABELS[task.status]}
+          </Badge>
+        )}
         <Text size="xs" c="dimmed">
           {task.dueAt ? formatRelative(task.dueAt) : ''}
         </Text>

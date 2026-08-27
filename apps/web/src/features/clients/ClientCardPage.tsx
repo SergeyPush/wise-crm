@@ -1,6 +1,8 @@
 import {
   Alert,
+  Anchor,
   Badge,
+  Breadcrumbs,
   Button,
   Card,
   Checkbox,
@@ -111,6 +113,16 @@ export function ClientCardPage() {
 
   return (
     <>
+      {/* Не завжди зрозуміло, чи ти зараз на клієнті чи на задачі (feedback 27.08.2026) */}
+      <Breadcrumbs mb="xs">
+        <Anchor component={Link} to="/clients" size="sm" c="dimmed">
+          Клієнти
+        </Anchor>
+        <Text size="sm" c="dimmed">
+          {client.displayName}
+        </Text>
+      </Breadcrumbs>
+
       <PageHeader
         title={client.displayName}
         subtitle={`${CLIENT_TYPE_LABELS[client.type] ?? client.type} · у статусі ${formatRelative(client.statusSince)}`}
@@ -199,7 +211,7 @@ export function ClientCardPage() {
               </Tabs.Panel>
 
               <Tabs.Panel value="files" pt="md">
-                <FilesPanel clientId={clientId} />
+                <FilesPanel scope={{ clientId }} />
               </Tabs.Panel>
             </Tabs>
           </Stack>
@@ -334,8 +346,6 @@ const ACTIVITY_LABELS: Record<string, string> = {
   file_removed: 'Видалено документ',
 };
 
-const REQUIRES_RESULT = new Set(['CALL', 'PROPOSAL', 'CONTRACT']);
-
 /** Задачі клієнта (FR-3.4) — той самий реєстр дій, що й на загальному екрані «Задачі». */
 function ClientTasksPanel({ clientId }: { clientId: string }) {
   const { data: me } = useMe();
@@ -393,13 +403,9 @@ function ClientTasksPanel({ clientId }: { clientId: string }) {
                   <Checkbox
                     aria-label={`Завершити «${task.title}»`}
                     checked={false}
-                    onChange={() => {
-                      if (REQUIRES_RESULT.has(task.type)) {
-                        openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }));
-                      } else {
-                        complete.mutate({ id: task.id });
-                      }
-                    }}
+                    // Той самий openCompleteTaskModal, що й у ПКМ-меню (features/tasks/actions.ts):
+                    // для решти типів форма опційна, а не пропущена мовчки
+                    onChange={() => openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }))}
                   />
                   <Text size="sm">{task.title}</Text>
                 </Group>
