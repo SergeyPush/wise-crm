@@ -29,15 +29,26 @@ export function CreateTaskModal({ opened, onClose }: { opened: boolean; onClose:
     enabled: opened,
   });
 
-  const form = useForm({
-    initialValues: {
+  // Обчислюється наново при кожному виклику (а не застигле initialValues) —
+  // модалка змонтована постійно (TasksPage рендерить її незалежно від
+  // opened), тому form.reset() зі статичним initialValues відкотив би
+  // assigneeId до значення, зафіксованого при першому монтуванні: якщо на
+  // той момент me ще не встиг завантажитись — до null («Нерозподілена») —
+  // і лишав би його там до кінця сесії, навіть коли me вже підʼїхав (баг,
+  // знайдений код-рев'ю 27.08.2026).
+  function defaultValues() {
+    return {
       title: '',
       type: 'OTHER' as string,
       // За замовчуванням — на себе, як і в швидкому додаванні (TasksPage) —
       // а не в пул, щоб не губилась там мовчки, коли автор і не думав про пул.
       assigneeId: me?.id ?? null,
       dueAt: new Date().toISOString().slice(0, 10) as string | null,
-    },
+    };
+  }
+
+  const form = useForm({
+    initialValues: defaultValues(),
     validate: {
       title: (v) => (v.trim().length > 0 ? null : 'Вкажіть заголовок'),
     },
@@ -49,7 +60,10 @@ export function CreateTaskModal({ opened, onClose }: { opened: boolean; onClose:
   }, [me]);
 
   function reset() {
-    form.reset();
+    const values = defaultValues();
+    form.setValues(values);
+    form.resetDirty(values);
+    form.clearErrors();
     setClient(null);
     setError(null);
   }
