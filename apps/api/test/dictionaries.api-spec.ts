@@ -6,7 +6,7 @@ import { DEFAULT_PASSWORD, makeUser } from './helpers/factories';
 
 // Довідники в DICTIONARY_TABLES не труркейтяться між тестами (сидяться один
 // раз) — тому кожен запис тут з випадковим кодом, щоб тести не заважали одне одному.
-describe('Довідники: CRUD трьох редагованих (розділ 3 плану)', () => {
+describe('Довідники: CRUD трьох редагованих (розділ 3 плану) + PATCH статусів (backlog 27.08.2026)', () => {
   let ctx: TestApp;
 
   beforeAll(async () => {
@@ -62,9 +62,42 @@ describe('Довідники: CRUD трьох редагованих (розді
     expect(res.status).toBe(400);
   });
 
-  it('невідомий kind у POST — 400 (statuses редагується тільки міграцією)', async () => {
+  it('POST /dictionaries/statuses — 400 (додавати/видаляти статуси не можна, лише PATCH)', async () => {
     const agent = await loggedInUser('ADMIN');
     const res = await agent.post('/dictionaries/statuses', { code: 'X', label: 'Y' });
     expect(res.status).toBe(400);
+  });
+
+  it('ADMIN редагує назву/колір/порядок статусу, структурні поля незмінні (backlog 27.08.2026)', async () => {
+    const agent = await loggedInUser('ADMIN');
+    const status = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'NEW' } });
+
+    const res = await agent.patch(`/dictionaries/statuses/${status.id}`, {
+      label: 'Нова назва',
+      color: 'grape',
+      sortOrder: status.sortOrder + 10,
+      // code/isActive — легітимні поля DTO (в інших довідниках редаговані),
+      // але сервіс має їх ігнорувати саме для статусів — перевіряємо, що
+      // структурні поля не змінюються навіть коли їх все ж таки надіслати.
+      code: 'HACKED',
+      isActive: !status.isActive,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.label).toBe('Нова назва');
+    expect(res.body.color).toBe('grape');
+    expect(res.body.sortOrder).toBe(status.sortOrder + 10);
+    expect(res.body.code).toBe('NEW');
+    expect(res.body.stage).toBe(status.stage);
+    expect(res.body.isTerminal).toBe(status.isTerminal);
+    expect(res.body.isDefaultForNew).toBe(status.isDefaultForNew);
+    expect(res.body.isActive).toBe(status.isActive);
+  });
+
+  it('USER отримує 403 на редагування статусу', async () => {
+    const agent = await loggedInUser('USER');
+    const status = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'NEW' } });
+    const res = await agent.patch(`/dictionaries/statuses/${status.id}`, { label: 'X' });
+    expect(res.status).toBe(403);
   });
 });

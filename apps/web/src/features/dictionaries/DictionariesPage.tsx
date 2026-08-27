@@ -22,21 +22,27 @@ import { useState } from 'react';
 import { PageHeader } from '../../components/PageHeader';
 import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
-import { LeadSourceEntry, LostReasonEntry, TagEntry } from './types';
+import { ClientStatusEntry, LeadSourceEntry, LostReasonEntry, TagEntry } from './types';
 
 /**
- * Три редаговані довідники (розділ 3 плану): джерела лідів, причини відмови,
- * теги. Решта — лише міграцією, тому їх тут немає навіть на перегляд.
+ * Чотири редаговані довідники (розділ 3 плану + backlog 27.08.2026): джерела
+ * лідів, причини відмови, теги — повністю; статуси клієнтів — лише
+ * назва/колір/порядок (додавати/видаляти не можна, це зачіпає воронку).
+ * Решта — лише міграцією, тому їх тут немає навіть на перегляд.
  */
 export function DictionariesPage() {
   return (
     <>
-      <PageHeader title="Довідники" subtitle="Джерела лідів, причини відмови та теги — решта заводиться міграцією" />
+      <PageHeader
+        title="Довідники"
+        subtitle="Джерела лідів, причини відмови, теги та статуси клієнтів — решта заводиться міграцією"
+      />
       <Tabs defaultValue="lead-sources">
         <Tabs.List mb="md">
           <Tabs.Tab value="lead-sources">Джерела лідів</Tabs.Tab>
           <Tabs.Tab value="lost-reasons">Причини відмови</Tabs.Tab>
           <Tabs.Tab value="tags">Теги</Tabs.Tab>
+          <Tabs.Tab value="statuses">Статуси клієнтів</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="lead-sources">
@@ -48,10 +54,21 @@ export function DictionariesPage() {
         <Tabs.Panel value="tags">
           <TagsTable />
         </Tabs.Panel>
+        <Tabs.Panel value="statuses">
+          <ClientStatusesTable />
+        </Tabs.Panel>
       </Tabs>
     </>
   );
 }
+
+/** UA-мітки стадії воронки — лише для відображення, значення читає бекенд-логіка. */
+const STAGE_LABELS: Record<ClientStatusEntry['stage'], string> = {
+  LEAD: 'Лід',
+  IN_WORK: 'В роботі',
+  WON: 'Виграно',
+  LOST: 'Програно',
+};
 
 type CodeLabelKind = 'lead-sources' | 'lost-reasons';
 
@@ -309,6 +326,160 @@ function TagsTable() {
         />
       )}
     </>
+  );
+}
+
+function ClientStatusesTable() {
+  const [editing, setEditing] = useState<ClientStatusEntry | null>(null);
+
+  // isActive не фільтруємо (на відміну від інших довідників) — тут керування,
+  // деактивовані статуси теж мають лишатись видимими й редагованими.
+  const query = useQuery({
+    queryKey: ['dictionaries', 'statuses', 'all'],
+    queryFn: () => api.get<ClientStatusEntry[]>('/dictionaries/statuses'),
+  });
+
+  if (query.isLoading) {
+    return (
+      <Group justify="center" py="xl">
+        <Loader />
+      </Group>
+    );
+  }
+  if (query.isError) {
+    const e = query.error;
+    return (
+      <ErrorState
+        message={e instanceof ApiRequestError ? e.message : 'Не вдалося завантажити статуси'}
+        requestId={e instanceof ApiRequestError ? e.requestId : undefined}
+        onRetry={() => query.refetch()}
+      />
+    );
+  }
+
+  const items = query.data ?? [];
+
+  return (
+    <>
+      <Text size="sm" c="dimmed" mb="sm">
+        Додавання і видалення статусів тут недоступне — це зачіпає воронку і звітність. Можна змінити лише назву,
+        колір і порядок відображення.
+      </Text>
+
+      <Paper withBorder radius="md">
+        <Table highlightOnHover verticalSpacing="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Код</Table.Th>
+              <Table.Th>Назва</Table.Th>
+              <Table.Th>Стадія</Table.Th>
+              <Table.Th>Порядок</Table.Th>
+              <Table.Th>Ознаки</Table.Th>
+              <Table.Th w={48} />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {items.map((item) => (
+              <Table.Tr key={item.id} opacity={item.isActive ? 1 : 0.55}>
+                <Table.Td>
+                  <Text size="sm">{item.code}</Text>
+                </Table.Td>
+                <Table.Td>
+                  <Badge color={item.color} variant="light">
+                    {item.label}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm" c="dimmed">
+                    {STAGE_LABELS[item.stage]}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm" c="dimmed">
+                    {item.sortOrder}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap={6}>
+                    {item.isDefaultForNew && (
+                      <Badge size="xs" variant="light" color="gray">
+                        за замовчуванням
+                      </Badge>
+                    )}
+                    {item.isTerminal && (
+                      <Badge size="xs" variant="light" color="gray">
+                        фінальний
+                      </Badge>
+                    )}
+                    {item.requiresReason && (
+                      <Badge size="xs" variant="light" color="gray">
+                        потрібна причина
+                      </Badge>
+                    )}
+                    {!item.isActive && (
+                      <Badge size="xs" variant="light" color="red">
+                        деактивовано
+                      </Badge>
+                    )}
+                  </Group>
+                </Table.Td>
+                <Table.Td>
+                  <Button variant="subtle" size="xs" px={6} onClick={() => setEditing(item)}>
+                    <IconPencil size={16} />
+                  </Button>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Paper>
+
+      {editing && <ClientStatusModal entry={editing} onClose={() => setEditing(null)} />}
+    </>
+  );
+}
+
+function ClientStatusModal({ entry, onClose }: { entry: ClientStatusEntry; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const form = useForm({
+    initialValues: { label: entry.label, color: entry.color, sortOrder: entry.sortOrder },
+    validate: { label: (v) => (v.trim().length > 0 ? null : "Обов'язкове поле") },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (values: typeof form.values) => api.patch(`/dictionaries/statuses/${entry.id}`, values),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['dictionaries', 'statuses'] });
+      onClose();
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Помилка'),
+  });
+
+  return (
+    <Modal opened onClose={onClose} title={`Редагування статусу «${entry.code}»`}>
+      <form
+        onSubmit={form.onSubmit((v) => {
+          setError(null);
+          mutation.mutate(v);
+        })}
+      >
+        <TextInput label="Назва" mb="sm" data-autofocus {...form.getInputProps('label')} />
+        <Group grow mb="sm">
+          <ColorInput label="Колір" {...form.getInputProps('color')} />
+          <NumberInput label="Порядок" min={0} {...form.getInputProps('sortOrder')} />
+        </Group>
+        {error && (
+          <Alert color="red" variant="light" mb="sm">
+            {error}
+          </Alert>
+        )}
+        <Button type="submit" loading={mutation.isPending} fullWidth>
+          Зберегти
+        </Button>
+      </form>
+    </Modal>
   );
 }
 
