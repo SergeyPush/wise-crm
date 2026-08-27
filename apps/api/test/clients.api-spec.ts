@@ -54,6 +54,54 @@ describe('Клієнти та воронка (етап 2)', () => {
     });
   });
 
+  describe('Архівація і відновлення (FR-8.1)', () => {
+    it('USER не бачить архів (?deleted=true) і не може відновити', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      await ctx.prisma.client.update({ where: { id: client.id }, data: { deletedAt: new Date() } });
+
+      const list = await agent.get('/clients?deleted=true');
+      expect(list.status).toBe(403);
+
+      const restore = await agent.post(`/clients/${client.id}/restore`);
+      expect(restore.status).toBe(403);
+    });
+
+    it('ADMIN бачить архівного клієнта лише у ?deleted=true, не у звичайному списку', async () => {
+      const { agent } = await loggedInUser('boss2@test.ua', 'ADMIN');
+      const client = await makeClient(ctx.prisma, { displayName: 'Архівний клієнт' });
+      await agent.delete(`/clients/${client.id}`);
+
+      const active = await agent.get('/clients?limit=100');
+      expect(active.body.items.map((c: { id: string }) => c.id)).not.toContain(client.id);
+
+      const archived = await agent.get('/clients?deleted=true&limit=100');
+      expect(archived.status).toBe(200);
+      expect(archived.body.items.map((c: { id: string }) => c.id)).toContain(client.id);
+    });
+
+    it('ADMIN відновлює архівного клієнта — знову видно у звичайному списку', async () => {
+      const { agent } = await loggedInUser('boss3@test.ua', 'ADMIN');
+      const client = await makeClient(ctx.prisma);
+      await agent.delete(`/clients/${client.id}`);
+
+      const res = await agent.post(`/clients/${client.id}/restore`);
+      expect(res.status).toBe(201);
+      expect(res.body.id).toBe(client.id);
+
+      const row = await ctx.prisma.client.findUnique({ where: { id: client.id } });
+      expect(row?.deletedAt).toBeNull();
+    });
+
+    it('відновлення активного (не видаленого) клієнта — 404', async () => {
+      const { agent } = await loggedInUser('boss4@test.ua', 'ADMIN');
+      const client = await makeClient(ctx.prisma);
+
+      const res = await agent.post(`/clients/${client.id}/restore`);
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('Створення ліда — 4 поля (FR-2.0.4)', () => {
     it('статус проставляється по isDefaultForNew, відповідальний — поточний користувач', async () => {
       const { agent, user } = await loggedInUser();
@@ -190,6 +238,27 @@ describe('Клієнти та воронка (етап 2)', () => {
         where: { clientId: client.id, type: 'status_changed' },
       });
       expect(activity).toHaveLength(1);
+      const audit = await ctx.prisma.auditLog.findMany({
+        where: { entityId: client.id, action: 'client.status_change' },
+      });
+      expect(audit).toHaveLength(1);
+    });
+
+    it('«Скасувати» — повторна зміна статусу назад лишає ДВІ записи в аудиті (FR-8.8/FR-7.3)', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma); // стартовий статус NEW
+      const inProgress = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'IN_PROGRESS' } });
+      const original = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { id: client.statusId } });
+
+      await agent.post(`/clients/${client.id}/status`, { statusId: inProgress.id });
+      await agent.post(`/clients/${client.id}/status`, { statusId: original.id }); // відкат
+
+      const audit = await ctx.prisma.auditLog.findMany({
+        where: { entityId: client.id, action: 'client.status_change' },
+      });
+      expect(audit).toHaveLength(2);
+      const current = await ctx.prisma.client.findUniqueOrThrow({ where: { id: client.id } });
+      expect(current.statusId).toBe(original.id);
     });
   });
 
@@ -209,6 +278,8 @@ describe('Клієнти та воронка (етап 2)', () => {
         where: { userId: prevOwner.id, type: 'client_reassigned' },
       });
       expect(notification).not.toBeNull();
+      const audit = await ctx.prisma.auditLog.findFirst({ where: { entityId: client.id, action: 'client.claim' } });
+      expect(audit).not.toBeNull();
     });
 
     it('одночасний claim() двома користувачами не падає 500-ю, а лишає рівно одного PRIMARY', async () => {
@@ -268,6 +339,171 @@ describe('Клієнти та воронка (етап 2)', () => {
       const res = await agent.put(`/clients/${client.id}/assignees`, {
         primaryId: '00000000-0000-0000-0000-000000000000',
       });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('Теги з ПКМ (FR-8.1)', () => {
+    it('додає тег ідемпотентно і пише подію в стрічку', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      // upsert, не create: Tag — справочник, не чистится между тестами (resetData),
+      // повторный прогон против той же test-БД иначе падает на unique(name)
+      const tag = await ctx.prisma.tag.upsert({ where: { name: 'VIP' }, create: { name: 'VIP' }, update: {} });
+
+      const first = await agent.post(`/clients/${client.id}/tags`, { tagId: tag.id });
+      expect(first.status).toBe(201);
+      const second = await agent.post(`/clients/${client.id}/tags`, { tagId: tag.id });
+      expect(second.status).toBe(201);
+
+      const rows = await ctx.prisma.clientTag.findMany({ where: { clientId: client.id } });
+      expect(rows).toHaveLength(1);
+
+      const del = await agent.delete(`/clients/${client.id}/tags/${tag.id}`);
+      expect(del.status).toBe(200);
+      expect(await ctx.prisma.clientTag.findMany({ where: { clientId: client.id } })).toHaveLength(0);
+    });
+  });
+
+  describe('Масові дії над виділенням (FR-2.13, FR-8.3)', () => {
+    it('setStatus застосовує статус до кожного клієнта зі списку', async () => {
+      const { agent } = await loggedInUser();
+      const a = await makeClient(ctx.prisma);
+      const b = await makeClient(ctx.prisma);
+      const inProgress = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'IN_PROGRESS' } });
+
+      const res = await agent.post('/clients/bulk', { ids: [a.id, b.id], action: 'setStatus', statusId: inProgress.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ succeeded: 2, failed: [] });
+      const refreshed = await ctx.prisma.client.findMany({ where: { id: { in: [a.id, b.id] } } });
+      expect(refreshed.every((c) => c.statusId === inProgress.id)).toBe(true);
+    });
+
+    it('setStatus у requiresReason без причини лишає клієнта в списку failed, а не падає 500-ю', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      const lost = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'LOST' } });
+
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'setStatus', statusId: lost.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body.succeeded).toBe(0);
+      expect(res.body.failed).toEqual([{ id: client.id, error: expect.any(String) }]);
+    });
+
+    it('setPrimary замінює лише PRIMARY, SECONDARY лишається як був', async () => {
+      const { agent } = await loggedInUser();
+      const oldPrimary = await makeUser(ctx.prisma, { email: 'old@test.ua' });
+      const secondary = await makeUser(ctx.prisma, { email: 'secondary@test.ua' });
+      const newPrimary = await makeUser(ctx.prisma, { email: 'new@test.ua' });
+      const client = await makeClient(ctx.prisma, { assigneeId: oldPrimary.id });
+      await ctx.prisma.clientAssignee.create({ data: { clientId: client.id, userId: secondary.id, role: 'SECONDARY' } });
+
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'setPrimary', userId: newPrimary.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ succeeded: 1, failed: [] });
+      const assignees = await ctx.prisma.clientAssignee.findMany({ where: { clientId: client.id } });
+      const byRole = Object.fromEntries(assignees.map((a) => [a.role, a.userId]));
+      expect(byRole.PRIMARY).toBe(newPrimary.id);
+      expect(byRole.SECONDARY).toBe(secondary.id);
+    });
+
+    it('addSecondary додає помічника, не чіпаючи PRIMARY', async () => {
+      const { agent } = await loggedInUser();
+      const primary = await makeUser(ctx.prisma, { email: 'primary1@test.ua' });
+      const helper = await makeUser(ctx.prisma, { email: 'helper1@test.ua' });
+      const client = await makeClient(ctx.prisma, { assigneeId: primary.id });
+
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'addSecondary', userId: helper.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ succeeded: 1, failed: [] });
+      const assignees = await ctx.prisma.clientAssignee.findMany({ where: { clientId: client.id } });
+      const byRole = Object.fromEntries(assignees.map((a) => [a.role, a.userId]));
+      expect(byRole.PRIMARY).toBe(primary.id);
+      expect(byRole.SECONDARY).toBe(helper.id);
+    });
+
+    it('addSecondary — повторний виклик тим самим userId нічого не ламає (ідемпотентно)', async () => {
+      const { agent } = await loggedInUser();
+      const primary = await makeUser(ctx.prisma, { email: 'primary2@test.ua' });
+      const helper = await makeUser(ctx.prisma, { email: 'helper2@test.ua' });
+      const client = await makeClient(ctx.prisma, { assigneeId: primary.id });
+
+      await agent.post('/clients/bulk', { ids: [client.id], action: 'addSecondary', userId: helper.id });
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'addSecondary', userId: helper.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ succeeded: 1, failed: [] });
+      const rows = await ctx.prisma.clientAssignee.findMany({ where: { clientId: client.id, userId: helper.id } });
+      expect(rows).toHaveLength(1);
+    });
+
+    it('removeSecondary прибирає лише SECONDARY, PRIMARY лишається', async () => {
+      const { agent } = await loggedInUser();
+      const primary = await makeUser(ctx.prisma, { email: 'primary3@test.ua' });
+      const helper = await makeUser(ctx.prisma, { email: 'helper3@test.ua' });
+      const client = await makeClient(ctx.prisma, { assigneeId: primary.id });
+      await ctx.prisma.clientAssignee.create({ data: { clientId: client.id, userId: helper.id, role: 'SECONDARY' } });
+
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'removeSecondary', userId: helper.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ succeeded: 1, failed: [] });
+      const assignees = await ctx.prisma.clientAssignee.findMany({ where: { clientId: client.id } });
+      expect(assignees).toHaveLength(1);
+      expect(assignees[0]!.role).toBe('PRIMARY');
+      expect(assignees[0]!.userId).toBe(primary.id);
+    });
+
+    it('setPrimary/addSecondary/removeSecondary без userId — 400', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'addSecondary' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('addTag ідемпотентно додає тег усім клієнтам зі списку', async () => {
+      const { agent } = await loggedInUser();
+      const a = await makeClient(ctx.prisma);
+      const b = await makeClient(ctx.prisma);
+      const tag = await ctx.prisma.tag.upsert({ where: { name: 'Пул-тест' }, create: { name: 'Пул-тест' }, update: {} });
+
+      const res = await agent.post('/clients/bulk', { ids: [a.id, b.id], action: 'addTag', tagId: tag.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ succeeded: 2, failed: [] });
+      const rows = await ctx.prisma.clientTag.findMany({ where: { tagId: tag.id } });
+      expect(rows).toHaveLength(2);
+    });
+
+    it('невідомий id клієнта — у failed, решта виконується', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+      const tag = await ctx.prisma.tag.upsert({ where: { name: 'Частковий-збій' }, create: { name: 'Частковий-збій' }, update: {} });
+
+      const res = await agent.post('/clients/bulk', {
+        ids: [client.id, '00000000-0000-0000-0000-000000000000'],
+        action: 'addTag',
+        tagId: tag.id,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.succeeded).toBe(1);
+      expect(res.body.failed).toHaveLength(1);
+      expect(res.body.failed[0].id).toBe('00000000-0000-0000-0000-000000000000');
+    });
+
+    it('без tagId для addTag — 400', async () => {
+      const { agent } = await loggedInUser();
+      const client = await makeClient(ctx.prisma);
+
+      const res = await agent.post('/clients/bulk', { ids: [client.id], action: 'addTag' });
 
       expect(res.status).toBe(400);
     });

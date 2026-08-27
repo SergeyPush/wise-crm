@@ -15,6 +15,8 @@ export type ContactRef = {
   isPrimary: boolean;
 };
 
+export type TagRef = { tag: { id: string; name: string; color: string } };
+
 export type ClientListItem = {
   id: string;
   displayName: string;
@@ -22,12 +24,16 @@ export type ClientListItem = {
   needsQualification: boolean;
   taxSystem: string | null;
   isVatPayer: boolean;
+  edrpou: string | null;
+  rnokpp: string | null;
   createdAt: string;
   updatedAt: string;
   lastActivityAt: string | null;
+  deletedAt: string | null;
   status: ClientStatusRef;
   source: LeadSourceRef | null;
   assignees: AssigneeRef[];
+  tags: TagRef[];
   contacts: { phone: string | null; email: string | null }[];
 };
 

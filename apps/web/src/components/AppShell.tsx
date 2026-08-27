@@ -10,9 +10,15 @@ import {
   IconUsers,
   IconUsersGroup,
 } from '@tabler/icons-react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
+import { Paginated, endOfKyivDay } from 'shared';
+import { api } from '../lib/api';
 import { Me, useLogout } from '../features/auth/useAuth';
+import { ClientListItem } from '../features/clients/types';
+import { TaskItem } from '../features/tasks/types';
+import { GlobalSearch } from './GlobalSearch';
 
 type NavItem = {
   label: string;
@@ -39,11 +45,28 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
   const isAdmin = me.role === 'ADMIN';
 
   // Бейджей в навигации ровно два и больше не заводить: если их много,
-  // на них перестают смотреть (06-ui-layout.md).
+  // на них перестают смотреть (06-ui-layout.md). «Задачі» — прострочені +
+  // сьогоднішні мої відкриті; «Клієнти» — нерозподілені ліди, лише якщо пул не пустий.
+  const dueTasks = useQuery({
+    queryKey: ['tasks', 'count', 'nav-badge'],
+    queryFn: () =>
+      api.get<Paginated<TaskItem>>(
+        `/tasks?assigneeId=me&status=OPEN,IN_PROGRESS&dueBefore=${encodeURIComponent(endOfKyivDay().toISOString())}&limit=1`,
+      ),
+    select: (r) => r.total,
+    refetchInterval: 60_000,
+  });
+  const poolCount = useQuery({
+    queryKey: ['clients', 'pool-count'],
+    queryFn: () => api.get<Paginated<ClientListItem>>('/clients?assigneeId=none&limit=1'),
+    select: (r) => r.total,
+    refetchInterval: 60_000,
+  });
+
   const items: NavItem[] = [
     { label: 'Дашборд', to: '/', icon: <IconLayoutDashboard size={18} /> },
-    { label: 'Клієнти', to: '/clients', icon: <IconUsersGroup size={18} /> },
-    { label: 'Задачі', to: '/tasks', icon: <IconChecklist size={18} /> },
+    { label: 'Клієнти', to: '/clients', icon: <IconUsersGroup size={18} />, badge: poolCount.data || undefined },
+    { label: 'Задачі', to: '/tasks', icon: <IconChecklist size={18} />, badge: dueTasks.data || undefined },
     { label: 'Довідники', to: '/settings/dictionaries', icon: <IconBook size={18} />, adminOnly: true },
     { label: 'Користувачі', to: '/settings/users', icon: <IconUsers size={18} />, adminOnly: true },
   ];
@@ -58,6 +81,8 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
       }}
       padding="md"
     >
+      <GlobalSearch />
+
       <MantineAppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -212,6 +213,12 @@ export class ListClientsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(Object.values(ClientType))
   type?: ClientType;
+
+  @ApiPropertyOptional({ description: 'true — лише архівні (ADMIN, FR-8.1 «Відновити»), інакше активні' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  deleted?: boolean;
 }
 
 export class ClientDuplicatesQueryDto {
@@ -275,6 +282,57 @@ export class ContactLogDto {
   @MinLength(1)
   @MaxLength(2000)
   result!: string;
+}
+
+/** «Додати тег» з ПКМ (FR-8.1). */
+export class AddTagDto {
+  @ApiProperty()
+  @IsUUID()
+  tagId!: string;
+}
+
+/** Масові дії над виділенням (FR-2.13, FR-8.3). Поля-параметри — за потрібними для дії. */
+export class BulkClientsDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  // Виконується поштучно, не в одній транзакції (див. коментар до bulk()) —
+  // 100 узгоджено з розміром сторінки таблиці (PAGE_SIZE=25 на фронті),
+  // з запасом, а не «скільки влізе»: більший ліміт лише подовжує послідовний
+  // прогін на клік в UI, який і так не чекає прогрес-бару
+  @ArrayMaxSize(100)
+  @IsUUID(undefined, { each: true })
+  ids!: string[];
+
+  @ApiProperty({ enum: ['setPrimary', 'addSecondary', 'removeSecondary', 'setStatus', 'addTag'] })
+  @IsIn(['setPrimary', 'addSecondary', 'removeSecondary', 'setStatus', 'addTag'])
+  action!: 'setPrimary' | 'addSecondary' | 'removeSecondary' | 'setStatus' | 'addTag';
+
+  @ApiPropertyOptional({ description: 'setPrimary / addSecondary / removeSecondary' })
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
+  @ApiPropertyOptional({ description: 'setStatus' })
+  @IsOptional()
+  @IsUUID()
+  statusId?: string;
+
+  @ApiPropertyOptional({ description: 'setStatus, коли цільовий статус requiresReason' })
+  @IsOptional()
+  @IsUUID()
+  reasonId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
+
+  @ApiPropertyOptional({ description: 'addTag' })
+  @IsOptional()
+  @IsUUID()
+  tagId?: string;
 }
 
 export class ContactDto {

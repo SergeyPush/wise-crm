@@ -76,19 +76,29 @@ export async function makeTask(
   overrides: Partial<{
     title: string;
     type: 'CALL' | 'PROPOSAL' | 'CONTRACT' | 'DOCS' | 'MEETING' | 'OTHER';
+    status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+    priority: 'LOW' | 'NORMAL' | 'HIGH';
     assigneeId: string | null;
     clientId: string;
     dueAt: Date;
+    completedAt: Date;
+    result: string;
+    cancelReason: string;
   }> = {},
 ) {
   return prisma.task.create({
     data: {
       title: overrides.title ?? 'Подзвонити клієнту',
       type: overrides.type ?? 'CALL',
+      status: overrides.status ?? 'OPEN',
+      priority: overrides.priority ?? 'NORMAL',
       authorId,
       assigneeId: overrides.assigneeId === undefined ? authorId : overrides.assigneeId,
       clientId: overrides.clientId,
       dueAt: overrides.dueAt,
+      completedAt: overrides.completedAt,
+      result: overrides.result,
+      cancelReason: overrides.cancelReason,
     },
   });
 }

@@ -17,7 +17,9 @@ import { AuthUser, CurrentUser } from '../../common/decorators/current-user.deco
 import { RequirePermission } from '../../common/decorators/permissions.decorator';
 import { ClientsService } from './clients.service';
 import {
+  AddTagDto,
   AssigneesDto,
+  BulkClientsDto,
   ChangeStatusDto,
   ClientDuplicatesQueryDto,
   ContactDto,
@@ -35,8 +37,8 @@ export class ClientsController {
   @Get()
   @RequirePermission('client:read')
   @ApiOperation({ summary: 'Список: фільтри плоскими query, assigneeId=none — пул' })
-  list(@Query() query: ListClientsQueryDto) {
-    return this.clients.list(query);
+  list(@Query() query: ListClientsQueryDto, @CurrentUser() actor: AuthUser) {
+    return this.clients.list(query, actor);
   }
 
   // Перед /:id — інакше «duplicates» зʼїсть ParseUUIDPipe
@@ -60,6 +62,14 @@ export class ClientsController {
     return this.clients.create(dto, actor.id);
   }
 
+  // Перед /:id — інакше «bulk» зʼїсть ParseUUIDPipe (як і duplicates вище)
+  @Post('bulk')
+  @RequirePermission('client:update')
+  @ApiOperation({ summary: 'Масові дії над виділенням (FR-2.13, FR-8.3)' })
+  bulk(@Body() dto: BulkClientsDto, @CurrentUser() actor: AuthUser) {
+    return this.clients.bulk(dto, actor);
+  }
+
   @Patch(':id')
   @RequirePermission('client:update')
   @ApiOperation({ summary: 'Приймає updatedAt, 409 при розбіжності (NFR-46)' })
@@ -76,6 +86,13 @@ export class ClientsController {
   @ApiOperation({ summary: "М'яке видалення, лише ADMIN (FR-2.3)" })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthUser, @Req() req: FastifyRequest) {
     return this.clients.remove(id, actor.id, req.ip);
+  }
+
+  @Post(':id/restore')
+  @RequirePermission('client:delete')
+  @ApiOperation({ summary: '«Відновити» — пара до архівації, лише ADMIN (FR-8.1)' })
+  restore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthUser, @Req() req: FastifyRequest) {
+    return this.clients.restore(id, actor.id, req.ip);
   }
 
   @Post(':id/claim')
@@ -157,5 +174,22 @@ export class ClientsController {
     @CurrentUser() actor: AuthUser,
   ) {
     return this.clients.removeContact(id, contactId, actor.id);
+  }
+
+  @Post(':id/tags')
+  @RequirePermission('client:update')
+  @ApiOperation({ summary: '«Додати тег» з ПКМ (FR-8.1)' })
+  addTag(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddTagDto, @CurrentUser() actor: AuthUser) {
+    return this.clients.addTag(id, dto, actor.id);
+  }
+
+  @Delete(':id/tags/:tagId')
+  @RequirePermission('client:update')
+  removeTag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('tagId', ParseUUIDPipe) tagId: string,
+    @CurrentUser() actor: AuthUser,
+  ) {
+    return this.clients.removeTag(id, tagId, actor.id);
   }
 }

@@ -22,6 +22,10 @@ export const AUTH = {
 
 export const PAGINATION = { DEFAULT_LIMIT: 25, MAX_LIMIT: 200 } as const;
 
+/** Пресети «Перенести термін» (FR-8.2) — підменю ПКМ і DTO /tasks/:id/snooze, один список на обидві сторони. */
+export const SNOOZE_PRESETS = ['today', 'tomorrow', 'in3days', 'nextweek', 'custom'] as const;
+export type SnoozePreset = (typeof SNOOZE_PRESETS)[number];
+
 /** Имена cookie. CSRF-токен читаемый (double-submit), сессионные — httpOnly. */
 export const COOKIE = {
   ACCESS: 'crm_at',

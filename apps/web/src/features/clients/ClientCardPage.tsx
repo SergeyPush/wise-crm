@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Grid,
   Group,
   Loader,
@@ -23,8 +24,9 @@ import { useDisclosure } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconArrowLeft, IconPhoneCall, IconUserCheck } from '@tabler/icons-react';
+import { IconArrowLeft, IconPhoneCall, IconPlus, IconUserCheck } from '@tabler/icons-react';
 import { Link, useParams } from '@tanstack/react-router';
+import { useContextMenu } from 'mantine-contextmenu';
 import { useState } from 'react';
 import { TaxSystem } from 'shared';
 import { PageHeader } from '../../components/PageHeader';
@@ -32,6 +34,12 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
 import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
 import { useCan, useMe } from '../auth/useAuth';
+import { ActionMenu } from '../registry/ActionMenu';
+import { toMenuItems } from '../registry/toMenuItems';
+import { useCompleteTask, useCreateTask, useTasks } from '../tasks/api';
+import { useTaskActions } from '../tasks/actions';
+import { openCompleteTaskModal } from '../tasks/TaskModals';
+import { TASK_TYPE_LABELS, TaskItem } from '../tasks/types';
 import { ClientCard } from './types';
 
 // Поля блока «Для тарифу» (FR-2.0.5) — чек-лист при WON перевіряє саме їх.
@@ -186,7 +194,7 @@ export function ClientCardPage() {
               </Tabs.Panel>
 
               <Tabs.Panel value="tasks" pt="md">
-                <EmptyState title="Задачі клієнта — на етапі 3" description="Поки що задачі ведуться на загальному екрані «Задачі»" />
+                <ClientTasksPanel clientId={clientId} />
               </Tabs.Panel>
 
               <Tabs.Panel value="files" pt="md">
@@ -309,10 +317,109 @@ const ACTIVITY_LABELS: Record<string, string> = {
   contact_logged: 'Зафіксовано контакт',
   contact_added: 'Додано контактну особу',
   contact_removed: 'Видалено контактну особу',
+  comment: 'Додано коментар',
+  tag_added: 'Додано тег',
+  tag_removed: 'Видалено тег',
+  task_created: 'Поставлено задачу',
+  task_updated: 'Змінено задачу',
+  task_completed: 'Завершено задачу',
+  task_cancelled: 'Скасовано задачу',
+  task_snoozed: 'Перенесено термін задачі',
+  task_reassigned: 'Перепризначено задачу',
   web_lead: 'Заявка з сайту',
   web_lead_duplicate: 'Повторна заявка з сайту',
   web_lead_unmapped_field: 'Не вдалося розпізнати значення поля заявки',
 };
+
+const REQUIRES_RESULT = new Set(['CALL', 'PROPOSAL', 'CONTRACT']);
+
+/** Задачі клієнта (FR-3.4) — той самий реєстр дій, що й на загальному екрані «Задачі». */
+function ClientTasksPanel({ clientId }: { clientId: string }) {
+  const { data: me } = useMe();
+  const { showContextMenu } = useContextMenu();
+  const actions = useTaskActions();
+  const complete = useCompleteTask();
+  const createTask = useCreateTask();
+  const [quickTitle, setQuickTitle] = useState('');
+
+  const query = useTasks({ clientId, status: 'OPEN,IN_PROGRESS' });
+
+  return (
+    <Stack gap="sm">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const title = quickTitle.trim();
+          if (!title) return;
+          createTask.mutate({ title, clientId }, { onSuccess: () => setQuickTitle('') });
+        }}
+      >
+        <TextInput
+          placeholder="Що зробити?"
+          leftSection={<IconPlus size={14} />}
+          value={quickTitle}
+          onChange={(e) => setQuickTitle(e.currentTarget.value)}
+          disabled={createTask.isPending}
+        />
+      </form>
+
+      {query.isLoading ? (
+        <Group justify="center" py="md">
+          <Loader size="sm" />
+        </Group>
+      ) : !query.data || query.data.items.length === 0 ? (
+        <EmptyState title="Відкритих задач немає" description="Поставте задачу вище або через кнопку «+ Задача»" />
+      ) : (
+        <Paper withBorder radius="md">
+          {query.data.items.map((task: TaskItem, index) => {
+            const ctx = { user: me!, record: task };
+            return (
+              <Group
+                key={task.id}
+                p="sm"
+                justify="space-between"
+                wrap="nowrap"
+                style={{ borderTop: index === 0 ? undefined : '1px solid var(--mantine-color-gray-2)' }}
+                onContextMenu={(e) => {
+                  if (!me || e.shiftKey || window.getSelection()?.toString()) return;
+                  e.preventDefault();
+                  showContextMenu(toMenuItems(actions, ctx))(e);
+                }}
+              >
+                <Group gap="sm" wrap="nowrap">
+                  <Checkbox
+                    aria-label={`Завершити «${task.title}»`}
+                    checked={false}
+                    onChange={() => {
+                      if (REQUIRES_RESULT.has(task.type)) {
+                        openCompleteTaskModal(task.type, (result) => complete.mutate({ id: task.id, result }));
+                      } else {
+                        complete.mutate({ id: task.id });
+                      }
+                    }}
+                  />
+                  <Text size="sm">{task.title}</Text>
+                </Group>
+                <Group gap="xs" wrap="nowrap">
+                  <Text size="xs" c="dimmed">
+                    {task.dueAt ? formatRelative(task.dueAt) : ''}
+                  </Text>
+                  <Badge size="sm" variant="light">
+                    {TASK_TYPE_LABELS[task.type]}
+                  </Badge>
+                  <Text size="xs" c={task.assignee ? 'dimmed' : 'orange'}>
+                    {task.assignee?.fullName ?? 'Нерозподілена'}
+                  </Text>
+                  {me && <ActionMenu actions={actions} ctx={ctx} />}
+                </Group>
+              </Group>
+            );
+          })}
+        </Paper>
+      )}
+    </Stack>
+  );
+}
 
 function ContactsPanel({ client }: { client: ClientCard }) {
   const qc = useQueryClient();

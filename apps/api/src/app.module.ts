@@ -14,6 +14,8 @@ import { MeModule } from './modules/me/me.module';
 import { HealthModule } from './modules/health/health.module';
 import { DictionariesModule } from './modules/dictionaries/dictionaries.module';
 import { ClientsModule } from './modules/clients/clients.module';
+import { TasksModule } from './modules/tasks/tasks.module';
+import { CommentsModule } from './modules/comments/comments.module';
 import { WebLeadsModule } from './modules/web-leads/web-leads.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -60,6 +62,8 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     HealthModule,
     DictionariesModule,
     ClientsModule,
+    TasksModule,
+    CommentsModule,
     WebLeadsModule,
   ],
   providers: [
