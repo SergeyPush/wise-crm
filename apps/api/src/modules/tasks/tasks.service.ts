@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, Priority, TaskStatus } from '@prisma/client';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { endOfKyivDay, endOfKyivDayPlus, endOfNextKyivWeek, kyivDateParts } from '../../common/utils/calendar.util';
@@ -48,6 +48,8 @@ function isDueTodayKyiv(dueAt: Date | null, now: Date = new Date()): boolean {
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
@@ -351,5 +353,45 @@ export class TasksService {
     await this.prisma.task.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.log({ actorId: actor.id, action: 'task.delete', entityType: 'task', entityId: id });
     return { ok: true };
+  }
+
+  /**
+   * Масове видалення на вкладці «Завершені» (backlog 27.08.2026). Свідомо
+   * простіше за remove(): лише ADMIN, без перевірки владіння («автор або
+   * ADMIN») — прибирання завершеного сміття це задача менеджера, а не
+   * власника окремої задачі. Та ж модель часткової невдачі, що й у
+   * ClientsService.bulk(): помилка на одному id не блокує решту.
+   */
+  async bulkDelete(ids: string[], actor: AuthUser) {
+    if (actor.role !== 'ADMIN') {
+      throw new AppException(403, ErrorCode.FORBIDDEN, 'Недостатньо прав');
+    }
+
+    const failed: Array<{ id: string; error: string }> = [];
+    let succeeded = 0;
+
+    for (const id of ids) {
+      try {
+        const task = await this.prisma.task.findFirst({ where: { id, deletedAt: null } });
+        if (!task) throw new AppException(404, ErrorCode.NOT_FOUND, 'Задачу не знайдено');
+        // Ендпоінт лише для «Завершених» — відкриту/в роботі задачу цим не
+        // прибрати, навіть підсунувши її id напряму в тілі запиту
+        if (task.status !== 'DONE' && task.status !== 'CANCELLED') {
+          throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Задача ще не завершена');
+        }
+        await this.prisma.task.update({ where: { id }, data: { deletedAt: new Date() } });
+        await this.audit.log({ actorId: actor.id, action: 'task.delete', entityType: 'task', entityId: id });
+        succeeded += 1;
+      } catch (e) {
+        if (e instanceof AppException) {
+          failed.push({ id, error: e.message });
+        } else {
+          this.logger.error({ err: e, taskId: id }, 'Масове видалення задач: неочікувана помилка на записі');
+          failed.push({ id, error: 'Не вдалося видалити' });
+        }
+      }
+    }
+
+    return { succeeded, failed };
   }
 }

@@ -248,6 +248,49 @@ describe('Задачі (етап 3)', () => {
     });
   });
 
+  describe("Масове видалення завершених — лише ADMIN (backlog 27.08.2026)", () => {
+    it('USER отримує 403, навіть на власні завершені задачі', async () => {
+      const { agent, user } = await loggedInUser('bulk-user@test.ua');
+      const done = await makeTask(ctx.prisma, user.id, { status: 'DONE' });
+
+      const res = await agent.post('/tasks/bulk-delete', { ids: [done.id] });
+      expect(res.status).toBe(403);
+      const row = await ctx.prisma.task.findUnique({ where: { id: done.id } });
+      expect(row?.deletedAt).toBeNull();
+    });
+
+    it('ADMIN видаляє декілька завершених/скасованих одразу, чужі теж', async () => {
+      const { user: author } = await loggedInUser('bulk-author@test.ua');
+      const { agent: adminAgent } = await loggedInUser('bulk-admin@test.ua', 'ADMIN');
+      const done = await makeTask(ctx.prisma, author.id, { status: 'DONE' });
+      const cancelled = await makeTask(ctx.prisma, author.id, { status: 'CANCELLED' });
+
+      const res = await adminAgent.post('/tasks/bulk-delete', { ids: [done.id, cancelled.id] });
+      expect(res.status).toBe(201);
+      expect(res.body.succeeded).toBe(2);
+      expect(res.body.failed).toEqual([]);
+
+      const rows = await ctx.prisma.task.findMany({ where: { id: { in: [done.id, cancelled.id] } } });
+      expect(rows.every((r) => r.deletedAt !== null)).toBe(true);
+    });
+
+    it('відкриту задачу серед виділених не видаляє — потрапляє у failed, решта проходить', async () => {
+      const { user: author } = await loggedInUser('bulk-author2@test.ua');
+      const { agent: adminAgent } = await loggedInUser('bulk-admin2@test.ua', 'ADMIN');
+      const done = await makeTask(ctx.prisma, author.id, { status: 'DONE' });
+      const open = await makeTask(ctx.prisma, author.id, { status: 'OPEN' });
+
+      const res = await adminAgent.post('/tasks/bulk-delete', { ids: [done.id, open.id] });
+      expect(res.status).toBe(201);
+      expect(res.body.succeeded).toBe(1);
+      expect(res.body.failed).toHaveLength(1);
+      expect(res.body.failed[0].id).toBe(open.id);
+
+      const openRow = await ctx.prisma.task.findUnique({ where: { id: open.id } });
+      expect(openRow?.deletedAt).toBeNull();
+    });
+  });
+
   describe('Список і фільтри', () => {
     it('assigneeId=me повертає лише мої задачі', async () => {
       const { agent, user } = await loggedInUser();

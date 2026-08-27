@@ -1,9 +1,11 @@
-import { Badge, Checkbox, Collapse, Group, Loader, Paper, SegmentedControl, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core';
+import { Badge, Button, Checkbox, Collapse, Group, Loader, Paper, SegmentedControl, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import { IconChevronDown, IconChevronRight, IconTrash } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 import { useContextMenu } from 'mantine-contextmenu';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { PageHeader } from '../../components/PageHeader';
 import { ApiRequestError } from '../../lib/api';
@@ -11,7 +13,7 @@ import { formatRelative } from '../../lib/format';
 import { useMe } from '../auth/useAuth';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
-import { useCompleteTask, useCreateTask, useTasks } from './api';
+import { useBulkDeleteTasks, useCompleteTask, useCreateTask, useTasks } from './api';
 import { GROUP_COLLAPSED_BY_DEFAULT, GROUP_LABELS, GROUP_ORDER, groupTasks } from './group';
 import { useTaskActions } from './actions';
 import { TasksCalendar } from './TasksCalendar';
@@ -23,7 +25,10 @@ type Tab = 'mine' | 'all' | 'done' | 'calendar';
 export function TasksPage() {
   const [tab, setTab] = useState<Tab>('mine');
   const [quickTitle, setQuickTitle] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const createTask = useCreateTask();
+  const { data: me } = useMe();
+  const bulkDelete = useBulkDeleteTasks();
 
   const query = useTasks(
     tab === 'done'
@@ -34,7 +39,38 @@ export function TasksPage() {
     { enabled: tab !== 'calendar' },
   );
 
+  // Виділення має сенс лише на «Завершених» — при переході на іншу вкладку скидаємо
+  useEffect(() => setSelectedIds([]), [tab]);
+
   const groups = useMemo(() => groupTasks(query.data?.items ?? []), [query.data]);
+  const doneTasks = query.data?.items ?? [];
+  const canBulkDelete = tab === 'done' && me?.role === 'ADMIN';
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function confirmBulkDelete() {
+    modals.openConfirmModal({
+      title: 'Видалити задачі?',
+      children: `Буде видалено ${selectedIds.length} задач${selectedIds.length === 1 ? 'у' : ''}. Це м'яке видалення — записи лишаються в базі.`,
+      labels: { confirm: 'Видалити', cancel: 'Відміна' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        const ids = selectedIds;
+        bulkDelete.mutate(ids, {
+          onSuccess: (res) => {
+            setSelectedIds([]);
+            if (res.failed.length > 0) {
+              notifications.show({ color: 'orange', message: `Видалено ${res.succeeded}, не вдалося для ${res.failed.length}` });
+            } else {
+              notifications.show({ color: 'green', message: `Видалено ${res.succeeded}` });
+            }
+          },
+        });
+      },
+    });
+  }
 
   return (
     <>
@@ -100,11 +136,43 @@ export function TasksPage() {
         ) : tab === 'done' ? (
           // Завершені/скасовані — плоский список: групування за строком (FR overdue/сьогодні)
           // тут вводить в оману, задача вже позаду
-          <Paper withBorder radius="md">
-            {query.data.items.map((task, index) => (
-              <TaskRow key={task.id} task={task} isFirst={index === 0} showStatus />
-            ))}
-          </Paper>
+          <Stack gap="sm">
+            {canBulkDelete && (
+              <Group justify="space-between">
+                <Checkbox
+                  label="Виділити всі"
+                  checked={selectedIds.length > 0 && selectedIds.length === doneTasks.length}
+                  indeterminate={selectedIds.length > 0 && selectedIds.length < doneTasks.length}
+                  onChange={(e) => setSelectedIds(e.currentTarget.checked ? doneTasks.map((t) => t.id) : [])}
+                />
+                {selectedIds.length > 0 && (
+                  <Button
+                    size="xs"
+                    color="red"
+                    variant="light"
+                    leftSection={<IconTrash size={14} />}
+                    loading={bulkDelete.isPending}
+                    onClick={confirmBulkDelete}
+                  >
+                    Видалити ({selectedIds.length})
+                  </Button>
+                )}
+              </Group>
+            )}
+            <Paper withBorder radius="md">
+              {doneTasks.map((task, index) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  isFirst={index === 0}
+                  showStatus
+                  selectable={canBulkDelete}
+                  selected={selectedIds.includes(task.id)}
+                  onToggleSelected={toggleSelected}
+                />
+              ))}
+            </Paper>
+          </Stack>
         ) : (
           <Stack gap="md">
             {GROUP_ORDER.map((group) => {
@@ -164,7 +232,22 @@ function TaskGroupSection({
   );
 }
 
-function TaskRow({ task, isFirst, showStatus }: { task: TaskItem; isFirst: boolean; showStatus?: boolean }) {
+function TaskRow({
+  task,
+  isFirst,
+  showStatus,
+  selectable,
+  selected,
+  onToggleSelected,
+}: {
+  task: TaskItem;
+  isFirst: boolean;
+  showStatus?: boolean;
+  /** Масове видалення на «Завершених» (backlog 27.08.2026) — окремий чекбокс від «завершити». */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (id: string) => void;
+}) {
   const { data: me } = useMe();
   const navigate = useNavigate();
   const { showContextMenu } = useContextMenu();
@@ -187,6 +270,13 @@ function TaskRow({ task, isFirst, showStatus }: { task: TaskItem; isFirst: boole
       }}
     >
       <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+        {selectable && (
+          <Checkbox
+            aria-label={`Обрати «${task.title}»`}
+            checked={selected ?? false}
+            onChange={() => onToggleSelected?.(task.id)}
+          />
+        )}
         {!showStatus && (
           // Той самий openCompleteTaskModal, що й у ПКМ-меню: для типів без
           // обов'язкового результату форма опційна, а не пропущена мовчки
