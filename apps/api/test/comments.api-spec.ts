@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Agent } from './helpers/agent';
 import { TestApp, createTestApp, resetData } from './helpers/app';
-import { DEFAULT_PASSWORD, makeClient, makeUser } from './helpers/factories';
+import { DEFAULT_PASSWORD, makeClient, makeTask, makeUser } from './helpers/factories';
 
 describe('Коментарі (FR-8.1 «Додати коментар»)', () => {
   let ctx: TestApp;
@@ -68,5 +68,31 @@ describe('Коментарі (FR-8.1 «Додати коментар»)', () => 
     expect(notifications).toHaveLength(1);
     const selfNotified = await ctx.prisma.notification.findMany({ where: { userId: author.id, type: 'mention' } });
     expect(selfNotified).toHaveLength(0);
+  });
+
+  it('GET за entityType+entityId повертає коментарі задачі в хронологічному порядку', async () => {
+    const { agent } = await loggedInUser();
+    const client = await makeClient(ctx.prisma);
+    await agent.post('/comments', { entityType: 'client', entityId: client.id, body: 'Перший' });
+    await agent.post('/comments', { entityType: 'client', entityId: client.id, body: 'Другий' });
+
+    const res = await agent.get(`/comments?entityType=client&entityId=${client.id}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((c: { body: string }) => c.body)).toEqual(['Перший', 'Другий']);
+    expect(res.body[0].author.fullName).toBe('Співробітник');
+  });
+
+  it('GET за clientId бачить і коментарі клієнта, і коментарі його задач (як GET /files)', async () => {
+    const { agent, user } = await loggedInUser();
+    const client = await makeClient(ctx.prisma);
+    const task = await makeTask(ctx.prisma, user.id, { clientId: client.id });
+    await agent.post('/comments', { entityType: 'client', entityId: client.id, body: 'Про клієнта' });
+    await agent.post('/comments', { entityType: 'task', entityId: task.id, body: 'Про задачу' });
+
+    const res = await agent.get(`/comments?clientId=${client.id}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
   });
 });

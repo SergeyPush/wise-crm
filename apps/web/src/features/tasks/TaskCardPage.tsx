@@ -30,6 +30,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { ApiRequestError, api } from '../../lib/api';
 import { formatRelative } from '../../lib/format';
 import { useMe } from '../auth/useAuth';
+import { CommentsPanel } from '../comments/CommentsPanel';
 import { FilesPanel } from '../files/FilesPanel';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
@@ -128,6 +129,12 @@ function TaskCardContent({ task }: { task: TaskItem }) {
             >
               <EditForm task={task} />
             </Card>
+
+            <Title order={5}>Коментарі</Title>
+            <CommentsPanel
+              scope={{ entityType: 'task', entityId: task.id }}
+              target={{ entityType: 'task', entityId: task.id }}
+            />
 
             <Title order={5}>Документи</Title>
             <FilesPanel scope={{ entityType: 'task', entityId: task.id }} />

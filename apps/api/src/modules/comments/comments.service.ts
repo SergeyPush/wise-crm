@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ErrorCode } from 'shared';
 import { AppException } from '../../common/app.exception';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CreateCommentDto } from './dto/comment.dto';
+import { CreateCommentDto, ListCommentsQueryDto } from './dto/comment.dto';
 
 /** FR-2.16 (лента): коментар одразу пише подію в activity_events. */
 @Injectable()
@@ -14,6 +15,23 @@ export class CommentsService {
     private readonly activity: ActivityService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  async list(filter: ListCommentsQueryDto) {
+    const where: Prisma.CommentWhereInput = { deletedAt: null };
+    if (filter.entityType && filter.entityId) {
+      where.entityType = filter.entityType;
+      where.entityId = filter.entityId;
+    } else if (filter.clientId) {
+      where.clientId = filter.clientId;
+    }
+
+    return this.prisma.comment.findMany({
+      where,
+      // Найновіший унизу — читається як стрічка листування, а не як лог подій
+      orderBy: { createdAt: 'asc' },
+      include: { author: { select: { id: true, fullName: true } } },
+    });
+  }
 
   async create(dto: CreateCommentDto, actorId: string) {
     let clientId: string | undefined;
