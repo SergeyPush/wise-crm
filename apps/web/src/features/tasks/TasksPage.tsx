@@ -14,10 +14,11 @@ import { toMenuItems } from '../registry/toMenuItems';
 import { useCompleteTask, useCreateTask, useTasks } from './api';
 import { GROUP_COLLAPSED_BY_DEFAULT, GROUP_LABELS, GROUP_ORDER, groupTasks } from './group';
 import { useTaskActions } from './actions';
+import { TasksCalendar } from './TasksCalendar';
 import { openCompleteTaskModal } from './TaskModals';
 import { TASK_STATUS_LABELS, TASK_TYPE_LABELS, TaskItem } from './types';
 
-type Tab = 'mine' | 'all' | 'done';
+type Tab = 'mine' | 'all' | 'done' | 'calendar';
 
 export function TasksPage() {
   const [tab, setTab] = useState<Tab>('mine');
@@ -28,6 +29,9 @@ export function TasksPage() {
     tab === 'done'
       ? { assigneeId: undefined, status: 'DONE,CANCELLED', sort: '-updatedAt' }
       : { assigneeId: tab === 'mine' ? 'me' : undefined, status: 'OPEN,IN_PROGRESS' },
+    // Календар тягне свій діапазон сам (dueAfter/dueBefore місяця) — цей
+    // запит йому не потрібен.
+    { enabled: tab !== 'calendar' },
   );
 
   const groups = useMemo(() => groupTasks(query.data?.items ?? []), [query.data]);
@@ -44,11 +48,12 @@ export function TasksPage() {
             { value: 'mine', label: 'Мої' },
             { value: 'all', label: 'Всі' },
             { value: 'done', label: 'Завершені' },
+            { value: 'calendar', label: 'Календар' },
           ]}
-          w={280}
+          w={360}
         />
 
-        {tab !== 'done' && (
+        {tab !== 'done' && tab !== 'calendar' && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -69,7 +74,9 @@ export function TasksPage() {
           </form>
         )}
 
-        {query.isLoading ? (
+        {tab === 'calendar' ? (
+          <TasksCalendar />
+        ) : query.isLoading ? (
           <Group justify="center" py="xl">
             <Loader />
           </Group>

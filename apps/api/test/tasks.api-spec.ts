@@ -276,6 +276,21 @@ describe('Задачі (етап 3)', () => {
       const activity = await ctx.prisma.activityEvent.findMany({ where: { clientId: client.id, type: 'task_created' } });
       expect(activity).toHaveLength(1);
     });
+
+    it('dueAfter+dueBefore — діапазон дат (backlog «Календар задач»)', async () => {
+      const { agent, user } = await loggedInUser();
+      const inRange = await makeTask(ctx.prisma, user.id, { dueAt: new Date('2026-09-15T20:59:59Z') });
+      const before = await makeTask(ctx.prisma, user.id, { dueAt: new Date('2026-08-31T20:59:59Z') });
+      const after = await makeTask(ctx.prisma, user.id, { dueAt: new Date('2026-10-01T21:00:00Z') });
+
+      const res = await agent.get('/tasks?dueAfter=2026-08-31T21:00:00.000Z&dueBefore=2026-09-30T20:59:59.999Z');
+
+      expect(res.status).toBe(200);
+      const ids = res.body.items.map((t: { id: string }) => t.id);
+      expect(ids).toContain(inRange.id);
+      expect(ids).not.toContain(before.id);
+      expect(ids).not.toContain(after.id);
+    });
   });
 
   describe('Права доступу (NFR-37)', () => {

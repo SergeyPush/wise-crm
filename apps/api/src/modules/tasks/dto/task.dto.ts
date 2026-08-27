@@ -45,6 +45,11 @@ export class ListTasksQueryDto extends PaginationQueryDto {
   @IsDateString()
   dueBefore?: string;
 
+  @ApiPropertyOptional({ description: 'dueAt >= це значення (діапазон місяця — календар задач, backlog)' })
+  @IsOptional()
+  @IsDateString()
+  dueAfter?: string;
+
   /** Розбір status="OPEN,IN_PROGRESS" з валідацією значень — щоб сміття в query не впало у where мовчки. */
   parsedStatuses(): string[] | undefined {
     if (!this.status) return undefined;
