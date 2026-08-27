@@ -17,6 +17,7 @@ import { ClientsModule } from './modules/clients/clients.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { FilesModule } from './modules/files/files.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
 import { WebLeadsModule } from './modules/web-leads/web-leads.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -66,6 +67,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     TasksModule,
     CommentsModule,
     FilesModule,
+    TelegramModule,
     WebLeadsModule,
   ],
   providers: [

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AUTH } from 'shared';
 
 export class LoginDto {
@@ -61,4 +61,11 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(500)
   avatarUrl?: string;
+
+  // FR-4.4: «один тумблер, не матриця» — вимкнути можна не відв'язуючи chatId,
+  // щоб увімкнути назад без повторного діплінку.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  telegramEnabled?: boolean;
 }

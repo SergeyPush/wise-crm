@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { endOfKyivDay, endOfKyivDayPlus, endOfNextKyivWeek, kyivDateParts, startOfKyivDay } from './kyiv-date';
+import {
+  endOfKyivDay,
+  endOfKyivDayPlus,
+  endOfNextKyivWeek,
+  isKyivQuietHours,
+  isKyivWeekday,
+  kyivDateParts,
+  kyivHour,
+  startOfKyivDay,
+} from './kyiv-date';
 
 /**
  * Класична пастка (09-implementation-plan.md, розділ 5.1): наївний розрахунок
@@ -75,5 +84,38 @@ describe('пресети переносу строку (FR-8.2)', () => {
   it('зсув через межу місяця й переходу на літній час', () => {
     // 28.03.2026 (зима, UTC+2) + 3 дні = 31.03.2026 (уже літо, UTC+3)
     expect(endOfKyivDayPlus(3, new Date('2026-03-28T10:00:00Z')).toISOString()).toBe('2026-03-31T20:59:59.000Z');
+  });
+});
+
+describe('тихі часи 20:00–08:00 за Києвом (FR-4.5.1)', () => {
+  it('19:59 — ще не тихі часи', () => {
+    // 2026-01-16T17:59Z = 19:59 Києва (зима, UTC+2)
+    expect(kyivHour(new Date('2026-01-16T17:59:00Z'))).toBe(19);
+    expect(isKyivQuietHours(new Date('2026-01-16T17:59:00Z'))).toBe(false);
+  });
+
+  it('20:00 — вже тихі часи', () => {
+    expect(isKyivQuietHours(new Date('2026-01-16T18:00:00Z'))).toBe(true);
+  });
+
+  it('07:59 — ще тихі часи, 08:00 — вже ні', () => {
+    expect(isKyivQuietHours(new Date('2026-01-16T05:59:00Z'))).toBe(true);
+    expect(isKyivQuietHours(new Date('2026-01-16T06:00:00Z'))).toBe(false);
+  });
+});
+
+describe('isKyivWeekday (FR-4.5.2: дайджест лише в будні)', () => {
+  it('п’ятниця — будній день', () => {
+    expect(isKyivWeekday(new Date('2026-01-16T10:00:00Z'))).toBe(true); // 16.01.2026 — пʼятниця
+  });
+
+  it('субота і неділя — вихідні', () => {
+    expect(isKyivWeekday(new Date('2026-01-17T10:00:00Z'))).toBe(false); // субота
+    expect(isKyivWeekday(new Date('2026-01-18T10:00:00Z'))).toBe(false); // неділя
+  });
+
+  it('пізній вечір п’ятниці за Києвом — все ще будній день, а не субота', () => {
+    // 2026-01-16T22:30Z = 00:30 Києва 17.01 (субота) — межа доби, а не UTC
+    expect(isKyivWeekday(new Date('2026-01-16T22:30:00Z'))).toBe(false);
   });
 });

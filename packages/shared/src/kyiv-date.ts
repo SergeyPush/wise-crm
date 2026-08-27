@@ -87,3 +87,28 @@ export function endOfKyivDayPlus(days: number, date: Date = new Date()): Date {
 export function endOfNextKyivWeek(date: Date = new Date()): Date {
   return endOfKyivDayPlus(7, date);
 }
+
+/** Година доби за Києвом (0–23) — тихі часи (FR-4.5.1), розсилка о 08:00 (FR-4.5.2). */
+export function kyivHour(date: Date = new Date()): number {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hourCycle: 'h23', hour: '2-digit' }).formatToParts(
+    date,
+  );
+  return part(parts, 'hour');
+}
+
+/** Тихі часи 20:00–08:00 за Києвом (FR-4.5.1) — лише продуктові сповіщення, не алерти моніторингу. */
+export function isKyivQuietHours(date: Date = new Date()): boolean {
+  const hour = kyivHour(date);
+  return hour >= 20 || hour < 8;
+}
+
+/**
+ * День тижня за Києвом: 0 — неділя, 6 — субота (FR-4.5.2: дайджест лише в будні).
+ * День тижня для трійки рік/місяць/день не залежить від часового поясу самого
+ * обчислення — Date.UTC із цими компонентами дає той самий календарний день.
+ */
+export function isKyivWeekday(date: Date = new Date()): boolean {
+  const { year, month, day } = kyivDateParts(date);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return weekday >= 1 && weekday <= 5;
+}

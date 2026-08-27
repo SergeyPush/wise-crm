@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, TaskStatus } from '@prisma/client';
+import { Prisma, Priority, TaskStatus } from '@prisma/client';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
-import { endOfKyivDay, endOfKyivDayPlus, endOfNextKyivWeek } from '../../common/utils/calendar.util';
+import { endOfKyivDay, endOfKyivDayPlus, endOfNextKyivWeek, kyivDateParts } from '../../common/utils/calendar.util';
 import { ErrorCode, TASK_TYPES_REQUIRING_RESULT, TaskType, can } from 'shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppException } from '../../common/app.exception';
@@ -37,6 +37,14 @@ const LIST_SELECT = {
 } satisfies Prisma.TaskSelect;
 
 const OPEN_STATUSES: TaskStatus[] = ['OPEN', 'IN_PROGRESS'];
+
+/** FR-4.5: «призначено задачу з терміном сьогодні» — HIGH, решта призначень — NORMAL. */
+function isDueTodayKyiv(dueAt: Date | null, now: Date = new Date()): boolean {
+  if (!dueAt) return false;
+  const a = kyivDateParts(dueAt);
+  const b = kyivDateParts(now);
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
 
 @Injectable()
 export class TasksService {
@@ -135,6 +143,7 @@ export class TasksService {
             entityType: 'task',
             entityId: task.id,
             link: `/tasks/${task.id}`,
+            priority: isDueTodayKyiv(task.dueAt) ? Priority.HIGH : Priority.NORMAL,
           },
           tx,
         );
@@ -208,6 +217,7 @@ export class TasksService {
           tx,
         );
         if (dto.assigneeId && dto.assigneeId !== actor.id) {
+          const effectiveDueAt = dueAt !== undefined ? new Date(dueAt) : current.dueAt;
           await this.notifications.notifyUser(
             dto.assigneeId,
             {
@@ -216,6 +226,7 @@ export class TasksService {
               entityType: 'task',
               entityId: id,
               link: `/tasks/${id}`,
+              priority: isDueTodayKyiv(effectiveDueAt) ? Priority.HIGH : Priority.NORMAL,
             },
             tx,
           );
