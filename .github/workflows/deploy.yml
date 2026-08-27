@@ -9,6 +9,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Несколько пушей подряд запускают несколько Deploy почти одновременно —
+# без этого они гонятся за один и тот же контейнер на сервере и валятся
+# конфликтом имён (обнаружено 27.08.2026: два деплоя подряд, один упал на
+# "container name already in use", хотя фактически задеплоился другой
+# параллельный ран). cancel-in-progress: false — не обрывать деплой на
+# середине, следующий просто ждёт своей очереди.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
