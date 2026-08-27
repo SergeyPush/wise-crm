@@ -28,3 +28,25 @@ export class CreateCommentDto {
   @IsUUID('4', { each: true })
   mentionedUserIds?: string[];
 }
+
+/**
+ * Той самий принцип, що й у ListFilesQueryDto: пряма пара entityType+entityId
+ * (коментарі саме цієї задачі) або clientId (усі коментарі клієнта, зокрема
+ * лишені під його задачами — Comment.clientId для цього й денормалізовано).
+ */
+export class ListCommentsQueryDto {
+  @ApiPropertyOptional({ enum: ['client', 'task'] })
+  @IsOptional()
+  @IsIn(['client', 'task'])
+  entityType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  entityId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+}

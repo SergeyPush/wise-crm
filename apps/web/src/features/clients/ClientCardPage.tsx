@@ -36,6 +36,7 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
 import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
 import { useCan, useMe } from '../auth/useAuth';
+import { CommentsPanel } from '../comments/CommentsPanel';
 import { FilesPanel } from '../files/FilesPanel';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
@@ -193,6 +194,7 @@ export function ClientCardPage() {
             <Tabs defaultValue="activity">
               <Tabs.List>
                 <Tabs.Tab value="activity">Активність</Tabs.Tab>
+                <Tabs.Tab value="comments">Коментарі</Tabs.Tab>
                 <Tabs.Tab value="contacts">Контактні особи</Tabs.Tab>
                 <Tabs.Tab value="tasks">Задачі</Tabs.Tab>
                 <Tabs.Tab value="files">Документи</Tabs.Tab>
@@ -200,6 +202,10 @@ export function ClientCardPage() {
 
               <Tabs.Panel value="activity" pt="md">
                 <ActivityFeed clientId={clientId} />
+              </Tabs.Panel>
+
+              <Tabs.Panel value="comments" pt="md">
+                <CommentsPanel scope={{ clientId }} target={{ entityType: 'client', entityId: clientId }} />
               </Tabs.Panel>
 
               <Tabs.Panel value="contacts" pt="md">
