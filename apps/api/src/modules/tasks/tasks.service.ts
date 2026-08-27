@@ -6,7 +6,7 @@ import { ErrorCode, TASK_TYPES_REQUIRING_RESULT, TaskType, can } from 'shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppException } from '../../common/app.exception';
 import { PaginationQueryDto, paginated } from '../../common/dto/pagination.dto';
-import { ActivityService } from '../activity/activity.service';
+import { ActivityService, diffChanged } from '../activity/activity.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -191,6 +191,9 @@ export class TasksService {
       }
 
       if (current.clientId) {
+        // Backlog «Деталізація стрічки активності»: diff по значеннях, а не
+        // лише перелік імен полів (той самий підхід, що й clients.service.ts).
+        const changed = diffChanged(Object.keys(data), current as unknown as Record<string, unknown>, data as Record<string, unknown>);
         await this.activity.log(
           {
             clientId: current.clientId,
@@ -198,7 +201,7 @@ export class TasksService {
             type: reassigning ? 'task_reassigned' : 'task_updated',
             entityType: 'task',
             entityId: id,
-            payload: { changed: Object.keys(rest) },
+            payload: { changed },
           },
           tx,
         );
