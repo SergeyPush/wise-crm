@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { TokenService } from '../auth/token.service';
 import { ChangePasswordDto, UpdateProfileDto } from '../auth/dto/auth.dto';
+import { DigestService } from '../digest/digest.service';
 import { TelegramService } from '../telegram/telegram.service';
 
 @ApiTags('me')
@@ -18,6 +19,7 @@ export class MeController {
     private readonly auth: AuthService,
     private readonly tokens: TokenService,
     private readonly telegram: TelegramService,
+    private readonly digest: DigestService,
   ) {}
 
   @Get()
@@ -35,6 +37,7 @@ export class MeController {
         avatarUrl: true,
         role: true,
         telegramEnabled: true,
+        digestHour: true,
         mustChangePassword: true,
         isProtected: true,
         lastLoginAt: true,
@@ -59,7 +62,7 @@ export class MeController {
     return this.prisma.user.update({
       where: { id: user.id },
       data: dto,
-      select: { id: true, fullName: true, phone: true, avatarUrl: true, telegramEnabled: true },
+      select: { id: true, fullName: true, phone: true, avatarUrl: true, telegramEnabled: true, digestHour: true },
     });
   }
 
@@ -84,6 +87,13 @@ export class MeController {
     const url = this.telegram.createLinkToken(user.id);
     if (!url) throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Telegram-бот тимчасово недоступний');
     return { url };
+  }
+
+  @Post('digest/test')
+  @ApiOperation({ summary: "«Надіслати зараз» — ручна перевірка, не чекаючи свою digestHour (backlog 27.08.2026)" })
+  async digestTest(@CurrentUser() user: AuthUser) {
+    await this.digest.sendDigestNow(user.id);
+    return { ok: true };
   }
 
   @Post('telegram/test')

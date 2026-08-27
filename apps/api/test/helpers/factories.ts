@@ -29,6 +29,7 @@ export async function makeUser(
     isActive: boolean;
     isProtected: boolean;
     mustChangePassword: boolean;
+    digestHour: number;
   }> = {},
 ) {
   const password = overrides.password ?? DEFAULT_PASSWORD;
@@ -41,6 +42,8 @@ export async function makeUser(
       isActive: overrides.isActive ?? true,
       isProtected: overrides.isProtected ?? false,
       mustChangePassword: overrides.mustChangePassword ?? false,
+      // Дефолт 8 — той самий, що й у схемі (backlog «час дайджесту за юзером»)
+      digestHour: overrides.digestHour ?? 8,
     },
   });
 }

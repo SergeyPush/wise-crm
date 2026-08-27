@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { AUTH } from 'shared';
 
 export class LoginDto {
@@ -68,4 +68,13 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   telegramEnabled?: boolean;
+
+  // Backlog 27.08.2026: раніше — хардкод 8:00 за Києвом на всіх, тепер кожен
+  // сам обирає годину (0-23). День тижня (лише будні) лишається спільним.
+  @ApiPropertyOptional({ minimum: 0, maximum: 23, description: 'Година ранкового дайджесту за Києвом (0-23)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  digestHour?: number;
 }

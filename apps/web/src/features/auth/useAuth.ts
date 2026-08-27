@@ -11,6 +11,7 @@ export type Me = {
   avatarUrl: string | null;
   role: Role;
   telegramEnabled: boolean;
+  digestHour: number;
   mustChangePassword: boolean;
   isProtected: boolean;
   permissions: Permission[];
