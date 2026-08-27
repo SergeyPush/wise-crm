@@ -31,7 +31,7 @@ describe('AllExceptionsFilter → AlertsService (NFR-32)', () => {
 
     expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(alerts.fire).toHaveBeenCalledTimes(1);
-    const [key, message] = (alerts.fire as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [key, message] = (alerts.fire as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(key).toContain('/clients/:id'); // маршрут-паттерн, а не «сирий» URL з id
     expect(message).toContain('requestId');
   });

@@ -74,8 +74,9 @@ describe('AlertsService', () => {
       ).resolves.toBeUndefined();
 
       expect(telegram.send).toHaveBeenCalledTimes(1);
-      expect(telegram.send.mock.calls[0][1]).toContain('job.broken');
-      expect(telegram.send.mock.calls[0][1]).toContain('щось зламалось');
+      const [, message] = telegram.send.mock.calls[0]!;
+      expect(message).toContain('job.broken');
+      expect(message).toContain('щось зламалось');
     });
   });
 });
