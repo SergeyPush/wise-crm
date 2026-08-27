@@ -1,10 +1,21 @@
 # Прод-стек: два контейнера за существующим nginx (04-deployment.md).
+# Конкретный сервер (проверено 27.08.2026): 1 vCPU / 4 ГБ RAM, nginx НА ХОСТЕ
+# (не в контейнере) — поэтому порт публикуется на 127.0.0.1, внешняя сеть
+# `web` не нужна. Лимиты памяти обязательны на 4 ГБ (раздел 0 плана):
+# без них OOM-killer при пике выбирает жертву сам, и ей может стать сайт.
 name: wise-crm
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    mem_limit: 1536m
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - max_connections=20
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -21,20 +32,19 @@ services:
     image: ghcr.io/${GH_OWNER}/wise-crm:${TAG}
     container_name: wise-crm-api # по этому имени его находит nginx
     restart: unless-stopped
+    mem_limit: 768m
     env_file: .env
     depends_on:
       postgres: { condition: service_healthy }
     volumes: [uploads:/app/uploads]
-    networks: [internal, web]
-    # ports: ['127.0.0.1:3001:3000']  # раскомментировать, если nginx на хосте
+    networks: [internal]
+    ports: ['127.0.0.1:3001:3000'] # nginx на хосте проксирует сюда
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/v1/health']
       interval: 30s
 
 networks:
   internal:
-  web:
-    external: true # общая сеть с nginx: docker network create web
 
 volumes:
   pgdata: {}
