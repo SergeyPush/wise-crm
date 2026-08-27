@@ -43,11 +43,20 @@ cp .env docker-compose.prod.yml "$WORK/"
 #    окно восстановления 3 суток, зато диск не улетает за месяц.
 ls -1d "$DEST"/20*/ 2>/dev/null | head -n -3 | xargs -r rm -rf
 
-# 5. Контроль места — на 50 ГБ это не формальность.
+# 5. Контроль места — на 50 ГБ это не формальность (NFR-33: алерт при > 80%,
+#    отдельно от отказа в загрузке файла при > 85% — тот уже в StorageService).
 USED=$(df --output=pcent /var | tail -1 | tr -dc '0-9')
 echo "Диск /var занят ${USED}%"
-if [ "$USED" -ge 85 ]; then
-  echo "WARNING: диск /var занят ${USED}% — см. NFR-33, файлы могут начать отклоняться"
+if [ "$USED" -ge 80 ]; then
+  MSG="⚠️ Диск /var на сервері CRM зайнятий ${USED}% — див. NFR-33"
+  echo "WARNING: $MSG"
+  # Напряму через Telegram Bot API, а не через API застосунку: скрипт має
+  # шуміти навіть якщо сам застосунок (і його AlertsService) вже лежить.
+  if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${ALERT_TELEGRAM_CHAT_ID:-}" ]; then
+    curl -fsS -m 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${ALERT_TELEGRAM_CHAT_ID}" \
+      --data-urlencode "text=${MSG}" >/dev/null || echo "Не вдалося надіслати алерт про диск у Telegram"
+  fi
 fi
 
 # Dead man's switch (Healthchecks.io): пинг только при успешном завершении —

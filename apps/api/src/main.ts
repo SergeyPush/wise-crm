@@ -57,6 +57,13 @@ async function bootstrap(): Promise<void> {
     crossOriginEmbedderPolicy: false,
   });
 
+  // 04-deployment.md, чек-лист прода: CRM не повинна потрапити в Google.
+  // Заголовок — тут, а не в nginx: усі security-заголовки в одному місці,
+  // конфіг nginx лишається чистим проксі (див. CSP вище — той самий принцип).
+  app.getHttpAdapter().getInstance().addHook('onSend', async (_req, reply) => {
+    reply.header('X-Robots-Tag', 'noindex, nofollow');
+  });
+
   app.setGlobalPrefix('api/v1');
 
   // NFR-18: whitelist + forbidNonWhitelisted — сырые DTO в ORM не попадают
