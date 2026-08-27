@@ -1,6 +1,7 @@
+import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../../lib/api';
+import { ApiRequestError, api } from '../../lib/api';
 import { NotificationItem } from './types';
 
 /**
@@ -43,6 +44,11 @@ export function useNotifications() {
       setItems((prev) => prev.map((i) => ({ ...i, readAt: i.readAt ?? now })));
       setUnreadCount(0);
     },
+    onError: (e) =>
+      notifications.show({
+        color: 'red',
+        message: e instanceof ApiRequestError ? e.message : 'Не вдалося позначити сповіщення прочитаними',
+      }),
   });
 
   return { items, unreadCount, isLoading: query.isLoading, markAllRead };
