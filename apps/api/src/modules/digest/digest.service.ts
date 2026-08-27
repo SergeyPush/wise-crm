@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Priority } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 import { APP_SETTINGS, kyivHour } from 'shared';
 import { endOfKyivDay, isKyivWeekday, startOfKyivDay } from '../../common/utils/calendar.util';
@@ -84,9 +85,16 @@ export class DigestService {
 
   /**
    * «Надіслати зараз» з профілю — ручна перевірка каналу доставки (той самий
-   * сенс, що й /me/telegram/test), а не заміна крону. На відміну від
-   * buildAndSendDigest() шле завжди, навіть якщо все порожньо — інакше клік
-   * без ефекту виглядав би як зламана кнопка, а не «нема прострочень».
+   * сенс, що й /me/telegram/test, який шле напряму, поза чергою). На відміну
+   * від buildAndSendDigest() шле завжди, навіть якщо все порожньо — інакше
+   * клік без ефекту виглядав би як зламана кнопка, а не «нема прострочень».
+   *
+   * priority: HIGH — навмисно, а не з каталогу (там у 'digest' — NORMAL):
+   * тихі часи 20:00–08:00 (FR-4.5) інакше відклали б Telegram-частину до
+   * ранку, і кнопка «зараз» мовчки збрехала б (знайдено на проді 27.08.2026 —
+   * в інтерфейсі сповіщення з'явилось одразу, в Telegram не прийшло взагалі,
+   * до ранку). In-app сповіщення тихих часів не має — з'являється миттєво
+   * в обох випадках, тут йдеться лише про чергу Telegram-доставки.
    */
   async sendDigestNow(userId: string): Promise<void> {
     const inactiveDays = await this.inactiveDaysSetting();
@@ -97,6 +105,7 @@ export class DigestService {
       title: 'Ранковий дайджест (тест)',
       body: this.renderUserLines(counts, unassignedPool),
       link: '/tasks',
+      priority: Priority.HIGH,
     });
   }
 
