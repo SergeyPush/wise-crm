@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TelegramService } from './telegram.service';
+import { AlertsService } from '../../common/alerts/alerts.service';
 
 const MAX_ATTEMPTS = 5;
 const BACKOFF_MINUTES = 5; // лінійний бекоф: 5, 10, 15... хвилин між спробами
@@ -20,10 +21,15 @@ export class TelegramDeliveryService {
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
     private readonly config: ConfigService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async processPending(): Promise<void> {
+    await this.alerts.guardJob('telegram.processPending', () => this.doProcessPending());
+  }
+
+  private async doProcessPending(): Promise<void> {
     if (!this.telegram.isEnabled) return;
 
     const deliveries = await this.prisma.notificationDelivery.findMany({

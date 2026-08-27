@@ -3,6 +3,7 @@ import { Priority } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AlertsService } from '../../common/alerts/alerts.service';
 
 const OVERDUE_DAYS = 3; // FR-4.5: «Задача прострочена > 3 днів» — HIGH
 
@@ -19,10 +20,15 @@ export class OverdueTasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM, { timeZone: 'Europe/Kyiv' })
   async notifyNewlyOverdue(): Promise<void> {
+    await this.alerts.guardJob('digest.notifyNewlyOverdue', () => this.doNotifyNewlyOverdue());
+  }
+
+  private async doNotifyNewlyOverdue(): Promise<void> {
     const threshold = new Date(Date.now() - OVERDUE_DAYS * 24 * 3_600_000);
     const tasks = await this.prisma.task.findMany({
       where: {

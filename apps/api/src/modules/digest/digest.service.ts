@@ -4,6 +4,7 @@ import { APP_SETTINGS } from 'shared';
 import { endOfKyivDay, isKyivWeekday, startOfKyivDay } from '../../common/utils/calendar.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AlertsService } from '../../common/alerts/alerts.service';
 
 const INACTIVE_DAYS_DEFAULT = 7;
 
@@ -22,6 +23,7 @@ export class DigestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_8AM, { timeZone: 'Europe/Kyiv' })
@@ -29,7 +31,8 @@ export class DigestService {
     // Винесено окремо від buildAndSendDigest(), щоб тести могли викликати
     // основну логіку напряму, не залежачи від того, який зараз день тижня.
     if (!isKyivWeekday()) return;
-    await this.buildAndSendDigest();
+    // NFR-31.4: падіння джоби не повинно тихо загубитись у unhandledRejection
+    await this.alerts.guardJob('digest.sendMorningDigest', () => this.buildAndSendDigest());
   }
 
   async buildAndSendDigest(): Promise<void> {

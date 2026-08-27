@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from './storage.service';
+import { AlertsService } from '../../common/alerts/alerts.service';
 
 const RETENTION_DAYS = 30; // FR-F12.1
 
@@ -17,10 +18,15 @@ export class FilesCleanupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async purgeOldFiles(): Promise<void> {
+    await this.alerts.guardJob('files.purgeOldFiles', () => this.doPurgeOldFiles());
+  }
+
+  private async doPurgeOldFiles(): Promise<void> {
     const threshold = new Date(Date.now() - RETENTION_DAYS * 24 * 3_600_000);
     const rows = await this.prisma.attachment.findMany({
       where: { deletedAt: { lte: threshold } },

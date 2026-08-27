@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { ApiError, ErrorCode } from 'shared';
 import { AppException } from '../app.exception';
+import { AlertsService } from '../alerts/alerts.service';
 
 /**
  * Единый формат ошибки (03-tech-stack.md): { statusCode, code, message, details, requestId }.
@@ -21,6 +22,8 @@ import { AppException } from '../app.exception';
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('HTTP');
+
+  constructor(private readonly alerts: AlertsService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -40,6 +43,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // 5xx — со стеком; 4xx — одной строкой, иначе лог забивают опечатки (NFR-31.1)
     if (statusCode >= 500) {
       this.logger.error({ requestId, code, err: exception }, message);
+      // NFR-32/32.1: алерт в Telegram-групу моніторингу, з дедуплікацією за
+      // маршрутом+кодом — інакше шторм однакових 5xx засипле групу за хвилину.
+      const route = req.routeOptions?.url ?? req.url;
+      void this.alerts.fire(
+        `5xx:${route}:${code}`,
+        `🔴 5xx на ${req.method} ${route}\nКод: ${code}\nrequestId: ${requestId}`,
+      );
     } else {
       const security = statusCode === 401 || statusCode === 403 || statusCode === 429;
       this.logger.warn(
