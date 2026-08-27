@@ -71,7 +71,14 @@ export class TasksService {
       ...(q.authorId ? { authorId: q.authorId } : {}),
       ...(q.type ? { type: q.type } : {}),
       ...(statuses ? { status: { in: statuses as TaskStatus[] } } : {}),
-      ...(q.dueBefore ? { dueAt: { lte: new Date(q.dueBefore) } } : {}),
+      ...(q.dueBefore || q.dueAfter
+        ? {
+            dueAt: {
+              ...(q.dueBefore ? { lte: new Date(q.dueBefore) } : {}),
+              ...(q.dueAfter ? { gte: new Date(q.dueAfter) } : {}),
+            },
+          }
+        : {}),
     };
 
     const [items, total] = await this.prisma.$transaction([

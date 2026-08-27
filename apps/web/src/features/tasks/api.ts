@@ -14,6 +14,7 @@ export type TaskFilters = {
   type?: TaskType;
   status?: string; // "OPEN,IN_PROGRESS"
   dueBefore?: string;
+  dueAfter?: string;
   limit?: number;
   sort?: string; // "-updatedAt"
 };
@@ -27,10 +28,11 @@ function toQuery(filters: TaskFilters): string {
   return s ? `?${s}` : '';
 }
 
-export function useTasks(filters: TaskFilters) {
+export function useTasks(filters: TaskFilters, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['tasks', 'list', filters],
     queryFn: () => api.get<Paginated<TaskItem>>(`/tasks${toQuery({ limit: 200, ...filters })}`),
+    enabled: options?.enabled,
   });
 }
 
