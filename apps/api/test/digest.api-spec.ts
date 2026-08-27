@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestApp, createTestApp, resetData } from './helpers/app';
 import { makeClient, makeTask, makeUser } from './helpers/factories';
 import { DigestService } from '../src/modules/digest/digest.service';
@@ -147,6 +147,37 @@ describe('Дайджест і прострочені задачі (FR-4.5, FR-4.
       expect(summary[0]!.body).toContain('Прострочено всього: 1');
       // Самому менеджеру о 8:00 нічого не пішло — це не його година
       expect(await ctx.prisma.notification.count({ where: { userId: manager.id, type: 'digest' } })).toBe(0);
+    });
+  });
+
+  describe('sendDigestNow — «Надіслати зараз» не бреше в тихі часи (знайдено на проді 27.08.2026)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('HIGH-пріоритет — Telegram-доставка не відкладається до ранку', async () => {
+      const user = await makeUser(ctx.prisma);
+      await ctx.prisma.user.update({
+        where: { id: user.id },
+        data: { telegramEnabled: true, telegramChatId: 'test-chat-id' },
+      });
+
+      // 22:00 за Києвом (EEST, UTC+3 наприкінці серпня) — тихі часи (20:00-08:00)
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-27T19:00:00.000Z'));
+
+      await digest.sendDigestNow(user.id);
+
+      const notification = await ctx.prisma.notification.findFirst({ where: { userId: user.id, type: 'digest' } });
+      expect(notification?.priority).toBe('HIGH');
+
+      const delivery = await ctx.prisma.notificationDelivery.findFirst({
+        where: { notificationId: notification!.id, channel: 'TELEGRAM' },
+      });
+      expect(delivery).not.toBeNull();
+      // Якби пріоритет лишився NORMAL (як у каталозі для 'digest'),
+      // telegramScheduledAt відклав би це до 8:00 наступного дня
+      expect(delivery!.scheduledAt.getTime()).toBeLessThanOrEqual(Date.now());
     });
   });
 });
