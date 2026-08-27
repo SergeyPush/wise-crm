@@ -17,6 +17,12 @@ RUN pnpm --filter shared build \
  && pnpm --filter api exec prisma generate \
  && pnpm --filter api exec nest build \
  && pnpm --filter web build
+# nest build игнорирует prisma/ (tsconfig.build.json), поэтому seed.ts
+# компилируется отдельно, автономным вызовом tsc — без него в runtime-образе
+# нечем его запускать (там только prod-зависимости, ts-node/tsx туда не входят).
+RUN pnpm --filter api exec tsc prisma/seed.ts \
+ --outDir prisma-dist --rootDir prisma --module commonjs --target ES2022 \
+ --esModuleInterop --skipLibCheck --resolveJsonModule --moduleResolution node
 
 FROM deps AS prune
 COPY --from=build /app /app
@@ -30,9 +36,10 @@ ENV NODE_ENV=production
 ENV TZ=Europe/Kyiv
 RUN apk add --no-cache openssl tzdata wget
 RUN addgroup -S app && adduser -S app -G app
-COPY --from=build  /app/apps/api/dist   ./dist
-COPY --from=build  /app/apps/api/prisma ./prisma
-COPY --from=build  /app/apps/web/dist   ./public
+COPY --from=build  /app/apps/api/dist         ./dist
+COPY --from=build  /app/apps/api/prisma       ./prisma
+COPY --from=build  /app/apps/api/prisma-dist/seed.js ./prisma/seed.js
+COPY --from=build  /app/apps/web/dist         ./public
 COPY --from=prune  /out/node_modules    ./node_modules
 # `pnpm deploy --prod` переустанавливает @prisma/client «с нуля» из реестра —
 # сгенерированный в стадии build клиент (node_modules/.prisma/client) при этом
@@ -45,5 +52,11 @@ RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
 USER app
 EXPOSE 3000
 # migrate deploy, никогда не migrate dev; prisma лежит в dependencies,
-# поэтому вызывается напрямую и не тянется из сети на каждом старте
-CMD ["sh","-c","node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]
+# поэтому вызывается напрямую и не тянется из сети на каждом старте.
+# seed.js идёт следом на каждом старте — он идемпотентен (upsert), а без
+# справочников (стартовый статус клиента, системное джерело "Сайт") система
+# физически не может создать ни одного клиента (09-implementation-plan.md,
+# раздел 3). Реальный инцидент 27.08.2026: контейнер стартовал и отвечал
+# 200 на все запросы, но каждая заявка с сайта тихо падала внутри транзакции —
+# без явного запуска seed эта дыра переживает любое количество деплоев.
+CMD ["sh","-c","node node_modules/prisma/build/index.js migrate deploy && node prisma/seed.js && node dist/main.js"]
