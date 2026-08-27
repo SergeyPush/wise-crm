@@ -28,6 +28,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ghcr.io требует lowercase имя репозитория; github.repository_owner
+      # (SergeyPush) идёт как есть и валит buildx на "must be lowercase"
+      - name: Нормалізувати власника репозиторію (Docker вимагає lowercase)
+        id: vars
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       # Один образ на релиз: фронт и бэк не могут разъехаться
       - uses: docker/build-push-action@v6
         with:
@@ -36,8 +42,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/wise-crm:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/wise-crm:latest
+            ghcr.io/${{ steps.vars.outputs.owner }}/wise-crm:${{ github.sha }}
+            ghcr.io/${{ steps.vars.outputs.owner }}/wise-crm:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -52,7 +58,7 @@ jobs:
             cd /opt/wise-crm
             ./scripts/pre-deploy-dump.sh
             export TAG=${{ github.sha }}
-            export GH_OWNER=${{ github.repository_owner }}
+            export GH_OWNER=${{ steps.vars.outputs.owner }}
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
             docker image prune -f
