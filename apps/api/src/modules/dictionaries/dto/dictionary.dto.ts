@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Stage } from '@prisma/client';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 /**
  * Один DTO на три редактируемых довідники (lead-sources, lost-reasons, tags) —
@@ -39,6 +40,13 @@ export class UpsertDictionaryEntryDto {
   @IsOptional()
   @IsInt()
   sortOrder?: number;
+
+  // Лише для створення статусів клієнтів (беклог 28.08.2026) — без нього
+  // dashboard.service.ts (wonStatuses) і воронка не знатимуть, куди рахувати новий.
+  @ApiPropertyOptional({ enum: Stage })
+  @IsOptional()
+  @IsEnum(Stage)
+  stage?: Stage;
 
   @ApiPropertyOptional()
   @IsOptional()

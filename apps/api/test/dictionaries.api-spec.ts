@@ -6,7 +6,7 @@ import { DEFAULT_PASSWORD, makeUser } from './helpers/factories';
 
 // Довідники в DICTIONARY_TABLES не труркейтяться між тестами (сидяться один
 // раз) — тому кожен запис тут з випадковим кодом, щоб тести не заважали одне одному.
-describe('Довідники: CRUD трьох редагованих (розділ 3 плану) + PATCH статусів (backlog 27.08.2026)', () => {
+describe('Довідники: CRUD чотирьох редагованих (розділ 3 плану, статуси — беклог 28.08.2026)', () => {
   let ctx: TestApp;
 
   beforeAll(async () => {
@@ -62,10 +62,82 @@ describe('Довідники: CRUD трьох редагованих (розді
     expect(res.status).toBe(400);
   });
 
-  it('POST /dictionaries/statuses — 400 (додавати/видаляти статуси не можна, лише PATCH)', async () => {
+  it('ADMIN створює статус з code+label+stage, структурні поля отримують безпечні дефолти (беклог 28.08.2026)', async () => {
     const agent = await loggedInUser('ADMIN');
-    const res = await agent.post('/dictionaries/statuses', { code: 'X', label: 'Y' });
+    const code = `ST_${randomUUID().slice(0, 6).toUpperCase()}`;
+
+    const res = await agent.post('/dictionaries/statuses', { code, label: 'Тестовий статус', stage: 'IN_WORK' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.code).toBe(code);
+    expect(res.body.stage).toBe('IN_WORK');
+    expect(res.body.color).toBe('gray'); // дефолт, коли не передано
+    expect(res.body.isTerminal).toBe(false);
+    expect(res.body.requiresReason).toBe(false);
+    expect(res.body.isDefaultForNew).toBe(false);
+    expect(res.body.isActive).toBe(true);
+  });
+
+  it('POST /dictionaries/statuses без stage — 400 (без stage воронка не знає, куди його рахувати)', async () => {
+    const agent = await loggedInUser('ADMIN');
+    const res = await agent.post('/dictionaries/statuses', { code: `ST_${randomUUID().slice(0, 6)}`, label: 'Y' });
     expect(res.status).toBe(400);
+  });
+
+  it('POST /dictionaries/statuses з невалідним stage — 400', async () => {
+    const agent = await loggedInUser('ADMIN');
+    const res = await agent.post('/dictionaries/statuses', {
+      code: `ST_${randomUUID().slice(0, 6)}`,
+      label: 'Y',
+      stage: 'NOT_A_STAGE',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /dictionaries/statuses з code, що вже існує — 409', async () => {
+    const agent = await loggedInUser('ADMIN');
+    const existing = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'NEW' } });
+
+    const res = await agent.post('/dictionaries/statuses', { code: existing.code, label: 'Дубль', stage: 'LEAD' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('спроба підсунути isTerminal/isDefaultForNew на create — 400 (forbidNonWhitelisted, їх немає в DTO)', async () => {
+    const agent = await loggedInUser('ADMIN');
+    const res = await agent.post('/dictionaries/statuses', {
+      code: `ST_${randomUUID().slice(0, 6)}`,
+      label: 'Y',
+      stage: 'WON',
+      isTerminal: true,
+      isDefaultForNew: true,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('новий статус без явного sortOrder стає в кінець списку', async () => {
+    const agent = await loggedInUser('ADMIN');
+    const before = await ctx.prisma.clientStatus.aggregate({ _max: { sortOrder: true } });
+
+    const res = await agent.post('/dictionaries/statuses', {
+      code: `ST_${randomUUID().slice(0, 6)}`,
+      label: 'Останній у списку',
+      stage: 'LEAD',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.sortOrder).toBeGreaterThan(before._max.sortOrder ?? 0);
+  });
+
+  it('USER отримує 403 на створення статусу', async () => {
+    const agent = await loggedInUser('USER');
+    const res = await agent.post('/dictionaries/statuses', {
+      code: `ST_${randomUUID().slice(0, 6)}`,
+      label: 'Y',
+      stage: 'LEAD',
+    });
+    expect(res.status).toBe(403);
   });
 
   it('ADMIN редагує назву/колір/порядок статусу, структурні поля незмінні (backlog 27.08.2026)', async () => {
