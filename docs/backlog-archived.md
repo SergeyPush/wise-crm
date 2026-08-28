@@ -188,3 +188,24 @@ UI не чіпаються: `DictionariesService.update()` для `kind === 'sta
 `sendDigestNow()` (той самий пріоритет, що вже й так пропускає тихі часи
 для `task_overdue`) — щойно натиснута кнопка, а не запланований дайджест,
 тому чекати ранку сенсу нема.
+
+---
+
+## Записано 28.08.2026
+
+### 🟢 Деактивований юзер не повинен отримувати Telegram — зроблено 28.08.2026
+
+П.5 зі списку «Перегляд пріоритетів і охоплення сповіщень»
+(`future-backlog.md`): реальна діра в `NotificationsService.enqueueTelegram()`
+— перевіряв лише `telegramEnabled` і `telegramChatId`, не `isActive`.
+Деактивація (`users.service.ts`) ці два поля не чіпає, тому звільнений
+співробітник зі старим `telegramChatId` і надалі отримував би
+Telegram-сповіщення про все, що на нього таргетовано напряму
+(`task_overdue`, `status_changed`/`client_reassigned`, якщо лишився в
+`assignees` клієнта). `notifyAllActive()`/`buildAndSendDigest()` цієї
+діри не мали — обидва вже фільтрують `isActive: true` на вибірці
+користувачів.
+
+Фікс — один `isActive: true` в `select`/перевірці всередині
+`enqueueTelegram()`, без зміни викликів на місцях. Тести —
+`notifications.service.spec.ts` (новий файл).
