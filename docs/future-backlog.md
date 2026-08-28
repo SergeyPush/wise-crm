@@ -78,18 +78,9 @@
    цього типу ніколи не викликається, попри `telegram: true` в каталозі.
    Фікс — переписати той виклик на `notifyUser()` (він і так приймає
    `tx`, транзакцію міняти не треба).
-5. **Деактивований юзер не повинен отримувати сповіщення.** Перевірено:
-   реальна діра в `NotificationsService.enqueueTelegram()`
-   (`notifications.service.ts`) — перевіряє лише `telegramEnabled` і
-   `telegramChatId` користувача, **не `isActive`**. Деактивація
-   (`users.service.ts`) не чіпає ці два поля, тому звільнений співробітник
-   зі старим `telegramChatId` і надалі отримуватиме Telegram-сповіщення
-   про все, що на нього таргетовано напряму (`task_overdue`, якщо задачу
-   не переназначили; `status_changed`/`client_reassigned`, якщо він
-   лишився в `assignees` клієнта). `notifyAllActive()`/`buildAndSendDigest()`
-   цієї діри не мають — обидва вже фільтрують `isActive: true` на вибірці
-   користувачів. Мінімальний фікс — один `isActive: true` в `select`/
-   перевірці всередині `enqueueTelegram()`, без зміни викликів на місцях.
+
+Пункт 5 (деактивований юзер отримував Telegram) зроблено 28.08.2026 —
+див. `backlog-archived.md`.
 
 ### ⬜ Тихе продовження сесії — фронт не викликає `POST /auth/refresh`
 
