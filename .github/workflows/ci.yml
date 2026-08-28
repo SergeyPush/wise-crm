@@ -6,6 +6,13 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Deploy триггериться через workflow_run від завершення CI (deploy.yml) —
+    # тому «CI не запустився» на суто docs-коміт означає «і Deploy не
+    # запуститься». PR-перевірки цим не зачіпаються: paths-ignore лише в push,
+    # чужий коміт з кодом все одно проганяє повний CI. Запит користувача
+    # 28.08.2026: правки в docs/ не повинні тригерити деплой на прод.
+    paths-ignore:
+      - 'docs/**'
 
 env:
   TEST_DATABASE_URL: postgresql://wisecrm:wisecrm@localhost:5432/wisecrm_test?schema=public
