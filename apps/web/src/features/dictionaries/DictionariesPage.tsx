@@ -8,6 +8,7 @@ import {
   Modal,
   NumberInput,
   Paper,
+  Select,
   Switch,
   Table,
   Tabs,
@@ -25,10 +26,11 @@ import { ApiRequestError, api } from '../../lib/api';
 import { ClientStatusEntry, LeadSourceEntry, LostReasonEntry, TagEntry } from './types';
 
 /**
- * Чотири редаговані довідники (розділ 3 плану + backlog 27.08.2026): джерела
- * лідів, причини відмови, теги — повністю; статуси клієнтів — лише
- * назва/колір/порядок (додавати/видаляти не можна, це зачіпає воронку).
- * Решта — лише міграцією, тому їх тут немає навіть на перегляд.
+ * Чотири редаговані довідники (розділ 3 плану): джерела лідів, причини
+ * відмови, теги — повністю; статуси клієнтів — створення (code+label+stage)
+ * і редагування назви/кольору/порядку (беклог 28.08.2026), видалення статусу
+ * все ще не зроблено — окреме питання, що робити з клієнтами на ньому.
+ * Решта довідників — лише міграцією, тому їх тут немає навіть на перегляд.
  */
 export function DictionariesPage() {
   return (
@@ -331,6 +333,7 @@ function TagsTable() {
 
 function ClientStatusesTable() {
   const [editing, setEditing] = useState<ClientStatusEntry | null>(null);
+  const [creating, creatingHandlers] = useDisclosure(false);
 
   // isActive не фільтруємо (на відміну від інших довідників) — тут керування,
   // деактивовані статуси теж мають лишатись видимими й редагованими.
@@ -361,10 +364,15 @@ function ClientStatusesTable() {
 
   return (
     <>
-      <Text size="sm" c="dimmed" mb="sm">
-        Додавання і видалення статусів тут недоступне — це зачіпає воронку і звітність. Можна змінити лише назву,
-        колір і порядок відображення.
-      </Text>
+      <Group justify="space-between" mb="sm" align="flex-start">
+        <Text size="sm" c="dimmed" maw={520}>
+          Новий статус одразу отримує стадію воронки; фінальність, причину і статус за замовчуванням з UI не
+          виставити — лише назву, колір і порядок. Видалення статусів тут все ще недоступне.
+        </Text>
+        <Button leftSection={<IconPlus size={16} />} onClick={creatingHandlers.open}>
+          Додати статус
+        </Button>
+      </Group>
 
       <Paper withBorder radius="md">
         <Table highlightOnHover verticalSpacing="sm">
@@ -434,8 +442,66 @@ function ClientStatusesTable() {
         </Table>
       </Paper>
 
+      {creating && <NewClientStatusModal onClose={creatingHandlers.close} />}
       {editing && <ClientStatusModal entry={editing} onClose={() => setEditing(null)} />}
     </>
+  );
+}
+
+/** Створення статусу (беклог 28.08.2026) — окрема форма від редагування: тут ще й code+stage. */
+function NewClientStatusModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const form = useForm({
+    initialValues: { code: '', label: '', stage: '' as ClientStatusEntry['stage'] | '', color: 'gray' },
+    validate: {
+      code: (v) => (v.trim().length > 0 ? null : "Обов'язкове поле"),
+      label: (v) => (v.trim().length > 0 ? null : "Обов'язкове поле"),
+      stage: (v) => (v ? null : "Обов'язкове поле"),
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (values: typeof form.values) => api.post('/dictionaries/statuses', values),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['dictionaries', 'statuses'] });
+      onClose();
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Помилка'),
+  });
+
+  return (
+    <Modal opened onClose={onClose} title="Новий статус">
+      <form
+        onSubmit={form.onSubmit((v) => {
+          setError(null);
+          mutation.mutate(v);
+        })}
+      >
+        <Group grow mb="sm">
+          <TextInput label="Код" data-autofocus {...form.getInputProps('code')} />
+          <Select
+            label="Стадія"
+            data={Object.entries(STAGE_LABELS).map(([value, label]) => ({ value, label }))}
+            {...form.getInputProps('stage')}
+          />
+        </Group>
+        <TextInput label="Назва" mb="sm" {...form.getInputProps('label')} />
+        <ColorInput label="Колір" mb="sm" {...form.getInputProps('color')} />
+        <Text size="xs" c="dimmed" mb="sm">
+          Порядок відображення — у кінець списку, змінити його можна пізніше через редагування.
+        </Text>
+        {error && (
+          <Alert color="red" variant="light" mb="sm">
+            {error}
+          </Alert>
+        )}
+        <Button type="submit" loading={mutation.isPending} fullWidth>
+          Створити
+        </Button>
+      </form>
+    </Modal>
   );
 }
 

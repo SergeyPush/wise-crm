@@ -18,14 +18,14 @@ export class DictionariesController {
 
   @Post(':kind')
   @RequirePermission('dictionary:manage')
-  @ApiOperation({ summary: 'Тільки три редаговані: lead-sources · lost-reasons · tags' })
+  @ApiOperation({ summary: 'Чотири редаговані: lead-sources · lost-reasons · tags · statuses (беклог 28.08.2026)' })
   create(@Param('kind') kind: string, @Body() dto: UpsertDictionaryEntryDto) {
     return this.dictionaries.create(kind, dto);
   }
 
   @Patch(':kind/:id')
   @RequirePermission('dictionary:manage')
-  @ApiOperation({ summary: 'Ще й statuses — але лише name/color/sortOrder, без create (backlog 27.08.2026)' })
+  @ApiOperation({ summary: 'Для statuses PATCH міняє лише label/color/sortOrder — структурні поля незмінні' })
   update(@Param('kind') kind: string, @Param('id') id: string, @Body() dto: UpsertDictionaryEntryDto) {
     return this.dictionaries.update(kind, id, dto);
   }

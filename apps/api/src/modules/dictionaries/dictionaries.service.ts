@@ -14,15 +14,11 @@ export const DICTIONARY_KINDS = [
 ] as const;
 export type DictionaryKind = (typeof DICTIONARY_KINDS)[number];
 
-/** Три из шести справочников создаются и редактируются через интерфейс (раздел 3 плана). */
-const CREATABLE_KINDS = ['lead-sources', 'lost-reasons', 'tags'] as const;
+/** Чотири з шести довідників створюються й редагуються через інтерфейс (розділ 3 плану + беклог 28.08.2026). */
+const CREATABLE_KINDS = ['lead-sources', 'lost-reasons', 'tags', 'statuses'] as const;
 type CreatableKind = (typeof CREATABLE_KINDS)[number];
 
-// Статуси клієнтів (backlog 27.08.2026): додавати/видаляти не можна — це
-// зачіпає воронку і звітність на дашборді (dashboard.service.ts шукає
-// clientStatus за `code`, web-leads.service.ts — за `isDefaultForNew`), тому
-// лише PATCH, і тільки для полів, які не впливають на логіку (див. update()).
-const UPDATABLE_KINDS = [...CREATABLE_KINDS, 'statuses'] as const;
+const UPDATABLE_KINDS = CREATABLE_KINDS;
 type UpdatableKind = (typeof UPDATABLE_KINDS)[number];
 
 function assertCreatable(kind: string): asserts kind is CreatableKind {
@@ -69,6 +65,27 @@ export class DictionariesService {
       if (!dto.name) throw new AppException(400, ErrorCode.VALIDATION_FAILED, "Поле «name» обов'язкове");
       return this.prisma.tag.create({ data: { name: dto.name, color: dto.color ?? 'gray' } });
     }
+    if (kind === 'statuses') {
+      if (!dto.code || !dto.label || !dto.stage) {
+        throw new AppException(400, ErrorCode.VALIDATION_FAILED, "Поля «code», «label» і «stage» обов'язкові");
+      }
+      // isTerminal/requiresReason/isDefaultForNew — свідомо відсутні в DTO
+      // (беклог 28.08.2026): це критичні для логіки поля (dashboard.service.ts,
+      // web-leads.service.ts), і ValidationPipe (forbidNonWhitelisted, main.ts)
+      // відхилить запит 400-ю, якщо їх все ж надіслати. Нові статуси завжди
+      // отримують безпечні дефолти зі схеми — false/false/false.
+      return this.prisma.clientStatus.create({
+        data: {
+          code: dto.code,
+          label: dto.label,
+          stage: dto.stage,
+          color: dto.color ?? 'gray',
+          // Без явного sortOrder — у кінець списку, а не 0 (щоб новий статус не
+          // вискочив на початок переліку переходів на картці клієнта).
+          sortOrder: dto.sortOrder ?? (await this.nextStatusSortOrder()),
+        },
+      });
+    }
     if (!dto.code || !dto.label) {
       throw new AppException(400, ErrorCode.VALIDATION_FAILED, "Поля «code» і «label» обов'язкові");
     }
@@ -76,6 +93,11 @@ export class DictionariesService {
     return kind === 'lead-sources'
       ? this.prisma.leadSource.create({ data })
       : this.prisma.lostReason.create({ data });
+  }
+
+  private async nextStatusSortOrder(): Promise<number> {
+    const last = await this.prisma.clientStatus.aggregate({ _max: { sortOrder: true } });
+    return (last._max.sortOrder ?? 0) + 1;
   }
 
   async update(kind: string, id: string, dto: UpsertDictionaryEntryDto) {

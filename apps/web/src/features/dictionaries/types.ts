@@ -23,10 +23,11 @@ export type TagEntry = {
 };
 
 /**
- * Статуси клієнтів (backlog 27.08.2026) — на відміну від трьох вище, лише
- * PATCH і лише name/color/sortOrder: stage/isTerminal/requiresReason/
- * isDefaultForNew критичні для воронки і читаються бекендом жорстко
- * (dashboard.service.ts, web-leads.service.ts), тому на UI — тільки перегляд.
+ * Статуси клієнтів. Створення — code+label+stage (беклог 28.08.2026), решта
+ * структурних полів (isTerminal/requiresReason/isDefaultForNew) — фіксовані
+ * дефолти зі схеми, з UI не задаються навіть на створенні. PATCH — і далі
+ * лише label/color/sortOrder: ці поля читаються бекендом жорстко
+ * (dashboard.service.ts, web-leads.service.ts), тому редагування обмежене.
  */
 export type ClientStatusEntry = {
   id: string;
