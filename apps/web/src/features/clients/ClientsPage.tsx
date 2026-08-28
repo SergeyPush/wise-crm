@@ -61,7 +61,7 @@ export function ClientsPage() {
   const [createOpened, createHandlers] = useDisclosure(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebouncedValue(search, 300);
-  const [tab, setTabState] = useState<Tab>('mine');
+  const [tab, setTabState] = useState<Tab>('all'); // «Усі» — вкладка за замовчуванням (беклог 28.08.2026)
   const [page, setPage] = useState(1);
   const [selection, setSelection] = useState<ClientListItem[]>([]);
 
@@ -186,10 +186,10 @@ export function ClientsPage() {
         <Group gap="xs">
           {(
             [
+              ['all', 'Усі'],
               ['mine', 'Мої'],
               ['inWork', 'Ліди в роботі'],
               ['pool', 'Нерозподілені'],
-              ['all', 'Усі'],
               // FR-8.1 «Відновити» — архів бачить лише той, хто може відновлювати
               ...(me?.role === 'ADMIN' ? ([['archived', 'Архів']] as const) : []),
             ] as const
