@@ -90,9 +90,11 @@ export class NotificationsService {
     if (!catalogEntry(type).telegram) return;
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { telegramEnabled: true, telegramChatId: true },
+      select: { telegramEnabled: true, telegramChatId: true, isActive: true },
     });
-    if (!user?.telegramEnabled || !user.telegramChatId) return;
+    // Деактивація не чіпає telegramEnabled/telegramChatId (users.service.ts) —
+    // без цієї перевірки звільнений юзер і далі отримував би Telegram (беклог 28.08.2026).
+    if (!user?.isActive || !user.telegramEnabled || !user.telegramChatId) return;
     await db.notificationDelivery.create({
       data: { notificationId, channel: 'TELEGRAM', scheduledAt: telegramScheduledAt(priority, new Date()) },
     });
