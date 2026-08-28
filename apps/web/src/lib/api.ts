@@ -27,7 +27,26 @@ export function csrfToken(): string {
 
 type RequestOptions = { method?: string; body?: unknown; signal?: AbortSignal };
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+// Тихе продовження сесії (беклог 28.08.2026): access-токен живе 15 хв, refresh — 30 днів,
+// а фронт /auth/refresh раніше ніде не викликав. Спільний проміс — щоб кілька паралельних
+// 401 не сіпали /auth/refresh кожен окремо, а чекали на один виклик.
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    // @Public() і без CsrfGuard (auth.controller.ts) — refresh-cookie й так
+    // читається лише самим бекендом, заголовок CSRF тут не потрібен.
+    refreshInFlight = fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'include' })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
   const method = options.method ?? 'GET';
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -42,6 +61,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   });
 
   if (res.status === 204) return undefined as T;
+
+  // /auth/* лишаємо як є: 401 там — своя семантика (невірний пароль,
+  // прострочений refresh), а не «access-токен протух», рефреш не допоможе.
+  if (res.status === 401 && !isRetry && !path.startsWith('/auth/')) {
+    const refreshed = await refreshSession();
+    if (refreshed) return request<T>(path, options, true);
+    window.location.assign('/login');
+  }
 
   const payload = await res.json().catch(() => null);
 
