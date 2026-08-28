@@ -24,7 +24,7 @@ import { TASK_STATUS_LABELS, TASK_TYPE_LABELS, TaskItem } from './types';
 type Tab = 'mine' | 'all' | 'done' | 'calendar';
 
 export function TasksPage() {
-  const [tab, setTab] = useState<Tab>('mine');
+  const [tab, setTab] = useState<Tab>('all'); // «Всі» — вкладка за замовчуванням (беклог 28.08.2026)
   const [quickTitle, setQuickTitle] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [fullFormOpened, { open: openFullForm, close: closeFullForm }] = useDisclosure(false);
@@ -83,8 +83,8 @@ export function TasksPage() {
           value={tab}
           onChange={(v) => setTab(v as Tab)}
           data={[
-            { value: 'mine', label: 'Мої' },
             { value: 'all', label: 'Всі' },
+            { value: 'mine', label: 'Мої' },
             { value: 'done', label: 'Завершені' },
             { value: 'calendar', label: 'Календар' },
           ]}
