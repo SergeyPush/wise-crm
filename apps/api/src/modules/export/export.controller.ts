@@ -15,7 +15,7 @@ export class ExportController {
 
   @Get('clients.xlsx')
   @RequirePermission('export:run')
-  @ApiOperation({ summary: 'Синхронно, по поточному фільтру; ADMIN — уся база, USER — лише свої (FR-E1)' })
+  @ApiOperation({ summary: 'Синхронно, по поточному фільтру. Лише ADMIN (рішення 01.09.2026, FR-E1)' })
   async clients(
     @Query() query: ExportClientsQueryDto,
     @CurrentUser() actor: AuthUser,
@@ -28,7 +28,7 @@ export class ExportController {
 
   @Get('tasks.xlsx')
   @RequirePermission('export:run')
-  @ApiOperation({ summary: 'Синхронно, по поточному фільтру; ADMIN — уся база, USER — лише свої (FR-E1)' })
+  @ApiOperation({ summary: 'Синхронно, по поточному фільтру. Лише ADMIN (рішення 01.09.2026, FR-E1)' })
   async tasks(
     @Query() query: ExportTasksQueryDto,
     @CurrentUser() actor: AuthUser,

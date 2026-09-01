@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXPORT_SCOPE, PERMISSIONS, Permission, can, permissionsFor } from './permissions';
+import { PERMISSIONS, Permission, can, permissionsFor } from './permissions';
 import { Role } from './enums';
 
 /**
@@ -30,7 +30,7 @@ const EXPECTED: Array<[Permission, boolean, boolean]> = [
   ['user:manage', true, false],
   ['dictionary:manage', true, false],
   ['audit:read', true, false],
-  ['export:run', true, true],
+  ['export:run', true, false],
   ['web-leads:read', true, false],
 ];
 
@@ -63,13 +63,6 @@ describe('матриця прав', () => {
     });
   });
 
-  it('обсяг експорту різний при однаковому праві', () => {
-    expect(can(Role.ADMIN, 'export:run')).toBe(true);
-    expect(can(Role.USER, 'export:run')).toBe(true);
-    expect(EXPORT_SCOPE.ADMIN).toBe('all');
-    expect(EXPORT_SCOPE.USER).toBe('own');
-  });
-
   it('невідоме право не дає доступу нікому', () => {
     expect(can(Role.ADMIN, 'nonexistent:action' as Permission)).toBe(false);
     expect(can(Role.USER, 'nonexistent:action' as Permission)).toBe(false);
@@ -86,6 +79,7 @@ describe('матриця прав', () => {
       expect(list).not.toContain('client:delete');
       expect(list).not.toContain('audit:read');
       expect(list).not.toContain('web-leads:read');
+      expect(list).not.toContain('export:run');
       expect(list).toContain('client:read');
     });
   });

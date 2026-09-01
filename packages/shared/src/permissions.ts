@@ -63,16 +63,12 @@ const MATRIX: Record<Permission, Record<Role, Rule>> = {
   'user:manage': { ADMIN: true, USER: false },
   'dictionary:manage': { ADMIN: true, USER: false },
   'audit:read': { ADMIN: true, USER: false },
-  // Право есть у обоих, но объём разный: ADMIN — вся база, USER — только свои.
-  // Сужение выборки делает сервис экспорта, см. EXPORT_SCOPE.
-  'export:run': { ADMIN: true, USER: true },
+  // Решение пользователя 01.09.2026: экспорт — только ADMIN. Раньше право было
+  // у обоих (USER — только свои), но выгрузка клиентской базы в файл — событие
+  // безопасности (FR-E6), и до появления кнопки на фронте разумнее сузить круг
+  // сразу, а не открывать для всех сотрудников с первого дня.
+  'export:run': { ADMIN: true, USER: false },
   'web-leads:read': { ADMIN: true, USER: false },
-};
-
-/** Объём экспорта: право одно, границы разные (раздел 2 плана). */
-export const EXPORT_SCOPE: Record<Role, 'all' | 'own'> = {
-  ADMIN: 'all',
-  USER: 'own',
 };
 
 export function can(role: Role, action: Permission, ctx: PermissionContext = {}): boolean {

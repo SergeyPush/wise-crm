@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Stage, TaskType } from '@prisma/client';
 import ExcelJS from 'exceljs';
-import { EXPORT_SCOPE } from 'shared';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -24,7 +23,7 @@ export class ExportService {
   ) {}
 
   async exportClients(query: ExportClientsQueryDto, actor: AuthUser): Promise<Buffer> {
-    const where = this.clientsWhere(query, actor);
+    const where = this.clientsWhere(query);
 
     const clients = await this.prisma.client.findMany({
       where,
@@ -72,7 +71,7 @@ export class ExportService {
   }
 
   async exportTasks(query: ExportTasksQueryDto, actor: AuthUser): Promise<Buffer> {
-    const where = this.tasksWhere(query, actor);
+    const where = this.tasksWhere(query);
     const tasks = await this.prisma.task.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -92,7 +91,10 @@ export class ExportService {
 
   // ──────────────────────────── where-клоузи ────────────────────────────
 
-  private clientsWhere(q: ExportClientsQueryDto, actor: AuthUser): Prisma.ClientWhereInput {
+  // Право 'export:run' з 01.09.2026 є лише в ADMIN (packages/shared/permissions.ts),
+  // тому звуження вибірки за actor тут більше не потрібне — лишається лише
+  // фільтр за query-параметрами.
+  private clientsWhere(q: ExportClientsQueryDto): Prisma.ClientWhereInput {
     const where: Prisma.ClientWhereInput = {
       deletedAt: null,
       ...(q.statusId ? { statusId: q.statusId } : {}),
@@ -101,11 +103,7 @@ export class ExportService {
       ...(q.tagId ? { tags: { some: { tagId: q.tagId } } } : {}),
       ...(q.q ? { displayName: { contains: q.q, mode: 'insensitive' } } : {}),
     };
-    // FR-E1: USER — лише свої, незалежно від того, що прийшло в assigneeId
-    // (інакше він просто підставить чужий id в query і вивантажить чужу базу).
-    if (EXPORT_SCOPE[actor.role] === 'own') {
-      where.assignees = { some: { userId: actor.id } };
-    } else if (q.assigneeId === 'none') {
+    if (q.assigneeId === 'none') {
       where.assignees = { none: {} };
     } else if (q.assigneeId) {
       where.assignees = { some: { userId: q.assigneeId } };
@@ -113,16 +111,14 @@ export class ExportService {
     return where;
   }
 
-  private tasksWhere(q: ExportTasksQueryDto, actor: AuthUser): Prisma.TaskWhereInput {
+  private tasksWhere(q: ExportTasksQueryDto): Prisma.TaskWhereInput {
     const where: Prisma.TaskWhereInput = {
       deletedAt: null,
       ...(q.clientId ? { clientId: q.clientId } : {}),
       ...(q.type ? { type: q.type as TaskType } : {}),
       ...(q.status ? { status: q.status as Prisma.TaskWhereInput['status'] } : {}),
     };
-    if (EXPORT_SCOPE[actor.role] === 'own') {
-      where.assigneeId = actor.id;
-    } else if (q.assigneeId === 'none') {
+    if (q.assigneeId === 'none') {
       where.assigneeId = null;
     } else if (q.assigneeId) {
       where.assigneeId = q.assigneeId;
