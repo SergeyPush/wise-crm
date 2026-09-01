@@ -14,7 +14,7 @@ import {
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconAlertTriangle, IconChevronDown, IconPlus, IconSearch } from '@tabler/icons-react';
+import { IconAlertTriangle, IconChevronDown, IconDownload, IconPlus, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 import { DataTable, type DataTableColumn } from 'mantine-datatable';
 import { useContextMenu } from 'mantine-contextmenu';
@@ -24,7 +24,8 @@ import { ApiRequestError, api } from '../../lib/api';
 import { TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
 import { PageHeader } from '../../components/PageHeader';
 import { EmptyState, ErrorState } from '../../components/EmptyState';
-import { useMe } from '../auth/useAuth';
+import { useCan, useMe } from '../auth/useAuth';
+import { exportClientsUrl } from '../export/exportUrl';
 import { ActionMenu, renderMenuItems } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
 import { Action, Ctx } from '../registry/types';
@@ -56,6 +57,7 @@ const PAGE_SIZE = 25;
 export function ClientsPage() {
   const navigate = useNavigate();
   const { data: me } = useMe();
+  const can = useCan(me);
   const { showContextMenu } = useContextMenu();
   const actions = useClientActions();
   const [createOpened, createHandlers] = useDisclosure(false);
@@ -163,9 +165,29 @@ export function ClientsPage() {
       <PageHeader
         title="Клієнти"
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={createHandlers.open}>
-            Новий лід
-          </Button>
+          <>
+            {/* Право export:run — лише ADMIN (рішення 01.09.2026). «Архів» без кнопки:
+                deleted-фільтр не підтримує ExportClientsQueryDto на бекенді. */}
+            {can('export:run') && tab !== 'archived' && (
+              <Button
+                component="a"
+                href={exportClientsUrl({
+                  q: debouncedSearch || undefined,
+                  assigneeId: tab === 'mine' ? me?.id : tab === 'pool' ? 'none' : undefined,
+                  stage: tab === 'inWork' ? 'IN_WORK' : undefined,
+                })}
+                target="_blank"
+                rel="noopener"
+                variant="default"
+                leftSection={<IconDownload size={16} />}
+              >
+                Експорт
+              </Button>
+            )}
+            <Button leftSection={<IconPlus size={16} />} onClick={createHandlers.open}>
+              Новий лід
+            </Button>
+          </>
         }
       />
 
