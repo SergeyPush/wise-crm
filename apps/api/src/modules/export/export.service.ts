@@ -134,7 +134,9 @@ export class ExportService {
 
   /** ADMIN без фільтра — подія безпеки: аудит завжди, сповіщення — лише для повної вивантаженні. */
   private async auditExport(actor: AuthUser, entity: 'clients' | 'tasks', count: number, unfiltered: boolean): Promise<void> {
-    const isFullExport = actor.role === 'ADMIN' && unfiltered;
+    // export:run — лише ADMIN (permissions.ts), тому actor.role тут завжди 'ADMIN';
+    // повнота вивантаження визначається лише відсутністю фільтра.
+    const isFullExport = unfiltered;
     await this.audit.log({
       actorId: actor.id,
       action: 'export.run',

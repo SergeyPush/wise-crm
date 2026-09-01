@@ -83,7 +83,10 @@ export function TasksPage() {
         actions={
           // Право export:run — лише ADMIN (рішення 01.09.2026); статус ExportTasksQueryDto
           // приймає одне значення, тому фільтр обмежено відповідальним (mine/all).
-          can('export:run') && (
+          // На «Завершені»/«Календар» кнопку ховаємо: там показуються задачі за
+          // статусом (DONE,CANCELLED) або за місяцем, а export.service цей фільтр
+          // повторити не може — краще без кнопки, ніж мовчки вивантажити все.
+          can('export:run') && tab !== 'done' && tab !== 'calendar' && (
             <Button
               component="a"
               href={exportTasksUrl({ assigneeId: tab === 'mine' ? me?.id : undefined })}
