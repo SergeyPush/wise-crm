@@ -33,38 +33,28 @@ describe('XLSX-експорт (FR-E1, FR-E2, FR-E6)', () => {
     return workbook;
   }
 
-  it('ADMIN отримує усіх клієнтів, USER — лише своїх (5.2 плану: обов’язковий тест на права)', async () => {
-    const { user: manager, agent: managerAgent } = await loggedInUser('manager@test.ua');
-    const { agent: adminAgent } = await loggedInUser('admin@test.ua', 'ADMIN');
-    await makeClient(ctx.prisma, { assigneeId: manager.id, displayName: 'Мій клієнт' });
-    await makeClient(ctx.prisma, { displayName: 'Чужий клієнт' }); // без відповідального
+  it('USER отримує 403 на обидва ендпоінти (рішення 01.09.2026: експорт лише ADMIN)', async () => {
+    const { agent } = await loggedInUser('manager@test.ua');
+    await makeClient(ctx.prisma, { displayName: 'Клієнт' });
 
-    const asManager = await managerAgent.getBinary('/export/clients.xlsx');
-    expect(asManager.status).toBe(200);
-    const managerBook = await loadWorkbook(asManager.body);
-    const managerSheet = managerBook.getWorksheet('Клієнти')!;
-    expect(managerSheet.rowCount).toBe(2); // шапка + 1 клієнт
-    // Після round-trip через .xlsx ключі колонок (column.key) не відновлюються —
-    // це властивість запису, не формату файлу — тому номер колонки, не ключ.
-    expect(managerSheet.getRow(2).getCell(2).text).toContain('Мій клієнт');
-
-    const asAdmin = await adminAgent.getBinary('/export/clients.xlsx');
-    const adminBook = await loadWorkbook(asAdmin.body);
-    expect(adminBook.getWorksheet('Клієнти')!.rowCount).toBe(3); // шапка + 2 клієнти
+    expect((await agent.get('/export/clients.xlsx')).status).toBe(403);
+    expect((await agent.get('/export/tasks.xlsx')).status).toBe(403);
   });
 
-  it('USER не бачить чужого клієнта, навіть підставивши assigneeId в query', async () => {
-    const { agent } = await loggedInUser('sneaky@test.ua');
+  it('ADMIN отримує усіх клієнтів незалежно від відповідального', async () => {
+    const { agent: adminAgent } = await loggedInUser('admin@test.ua', 'ADMIN');
     const other = await makeUser(ctx.prisma, { email: 'other@test.ua' });
-    await makeClient(ctx.prisma, { assigneeId: other.id });
+    await makeClient(ctx.prisma, { assigneeId: other.id, displayName: 'Клієнт менеджера' });
+    await makeClient(ctx.prisma, { displayName: 'Нерозподілений' }); // без відповідального
 
-    const res = await agent.getBinary(`/export/clients.xlsx?assigneeId=${other.id}`);
+    const res = await adminAgent.getBinary('/export/clients.xlsx');
+    expect(res.status).toBe(200);
     const book = await loadWorkbook(res.body);
-    expect(book.getWorksheet('Клієнти')!.rowCount).toBe(1); // лише шапка
+    expect(book.getWorksheet('Клієнти')!.rowCount).toBe(3); // шапка + 2 клієнти
   });
 
   it('файл має чотири аркуші з замороженою шапкою і автофільтром', async () => {
-    const { user, agent } = await loggedInUser('full@test.ua');
+    const { user, agent } = await loggedInUser('full@test.ua', 'ADMIN');
     const client = await makeClient(ctx.prisma, { assigneeId: user.id });
     await makeTask(ctx.prisma, user.id, { clientId: client.id, assigneeId: user.id });
 
@@ -78,7 +68,7 @@ describe('XLSX-експорт (FR-E1, FR-E2, FR-E6)', () => {
   });
 
   it('/export/tasks.xlsx — окремий файл лише з листом задач', async () => {
-    const { user, agent } = await loggedInUser('tasks@test.ua');
+    const { user, agent } = await loggedInUser('tasks@test.ua', 'ADMIN');
     const client = await makeClient(ctx.prisma, { assigneeId: user.id });
     await makeTask(ctx.prisma, user.id, { clientId: client.id, assigneeId: user.id, title: 'Подзвонити' });
 
@@ -89,7 +79,7 @@ describe('XLSX-експорт (FR-E1, FR-E2, FR-E6)', () => {
     expect(book.getWorksheet('Задачі')!.rowCount).toBe(2);
   });
 
-  it('без сесії — 401 (export:run є в обох ролей, але авторизація все одно потрібна)', async () => {
+  it('без сесії — 401', async () => {
     const res = await new Agent(ctx.url).get('/export/clients.xlsx');
     expect(res.status).toBe(401);
   });

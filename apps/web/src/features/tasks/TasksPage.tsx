@@ -2,7 +2,7 @@ import { Badge, Button, Checkbox, Collapse, Group, Loader, Paper, SegmentedContr
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { IconChevronDown, IconChevronRight, IconTrash } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconDownload, IconTrash } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 import { useContextMenu } from 'mantine-contextmenu';
 import { useEffect, useMemo, useState } from 'react';
@@ -10,7 +10,8 @@ import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { PageHeader } from '../../components/PageHeader';
 import { ApiRequestError } from '../../lib/api';
 import { formatRelative } from '../../lib/format';
-import { useMe } from '../auth/useAuth';
+import { useCan, useMe } from '../auth/useAuth';
+import { exportTasksUrl } from '../export/exportUrl';
 import { ActionMenu } from '../registry/ActionMenu';
 import { toMenuItems } from '../registry/toMenuItems';
 import { useBulkDeleteTasks, useCompleteTask, useCreateTask, useTasks } from './api';
@@ -30,6 +31,7 @@ export function TasksPage() {
   const [fullFormOpened, { open: openFullForm, close: closeFullForm }] = useDisclosure(false);
   const createTask = useCreateTask();
   const { data: me } = useMe();
+  const can = useCan(me);
   const bulkDelete = useBulkDeleteTasks();
 
   const query = useTasks(
@@ -76,7 +78,28 @@ export function TasksPage() {
 
   return (
     <>
-      <PageHeader title="Задачі" />
+      <PageHeader
+        title="Задачі"
+        actions={
+          // Право export:run — лише ADMIN (рішення 01.09.2026); статус ExportTasksQueryDto
+          // приймає одне значення, тому фільтр обмежено відповідальним (mine/all).
+          // На «Завершені»/«Календар» кнопку ховаємо: там показуються задачі за
+          // статусом (DONE,CANCELLED) або за місяцем, а export.service цей фільтр
+          // повторити не може — краще без кнопки, ніж мовчки вивантажити все.
+          can('export:run') && tab !== 'done' && tab !== 'calendar' && (
+            <Button
+              component="a"
+              href={exportTasksUrl({ assigneeId: tab === 'mine' ? me?.id : undefined })}
+              target="_blank"
+              rel="noopener"
+              variant="default"
+              leftSection={<IconDownload size={16} />}
+            >
+              Експорт
+            </Button>
+          )
+        }
+      />
 
       <Stack gap="sm">
         <SegmentedControl

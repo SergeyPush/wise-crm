@@ -290,3 +290,46 @@ label/color/sortOrder.
 (створення з дефолтами, відсутній/невалідний `stage` → 400, дублікат `code`
 → 409, підсунуті `isTerminal`/`isDefaultForNew` → 400 від `ValidationPipe`,
 sortOrder у кінець списку, 403 для USER).
+
+---
+
+## Записано 01.09.2026
+
+### 🟢 Експорт клієнтів/задач у Excel — право звужено до ADMIN, кнопка додана — зроблено 01.09.2026
+
+Бекенд (`GET /export/clients.xlsx`/`.../tasks.xlsx`, `ExportService`) був
+готовий ще з етапу 4, але виявилось два пробіли: право `export:run` мав і
+`USER` (з обмеженням «лише свої»), і на фронті взагалі не було кнопки —
+фіча існувала лише як прямий виклик API.
+
+**Крок 1 — звуження права** (рішення користувача): в
+`packages/shared/permissions.ts` `export:run` тепер `{ ADMIN: true, USER:
+false }` — єдине джерело правди, під яким стоїть guard на кожному
+ендпоінті (NFR-17), а не лише UI. `EXPORT_SCOPE` (`'all' | 'own'`)
+прибрано з `permissions.ts` і з `ExportService.clientsWhere`/`tasksWhere`
+як мертвий код — звуження вибірки для `USER` більше недосяжне, бо guard
+блокує раніше. Тести: `permissions.spec.ts` (`export:run` USER → `false`,
+відсутнє в `permissionsFor(USER)`), `export.api-spec.ts` (`USER` → `403`
+на обох ендпоінтах замість перевірки звуженої вибірки).
+
+**Крок 2 — кнопка «Експорт»**, видима лише коли `can('export:run')`
+(`useCan` з `GET /me`, той самий принцип, що й пункти «Користувачі»/
+«Довідники» в сайдбарі — право приходить з бекенда, фронт нічого не
+вирішує сам). Новий модуль `features/export/exportUrl.ts` —
+`exportClientsUrl`/`exportTasksUrl`, звичайні GET-посилання (`component="a"
+href=... target="_blank"`), не `fetch`+`blob`: сесія в httpOnly cookie,
+браузер якісно скачує файл сам за `Content-Disposition: attachment` з
+бекенда (той самий підхід, що вже був у `features/files/api.ts`,
+`downloadUrl`).
+
+На `ClientsPage.tsx` — кнопка в `PageHeader` поруч із «Новий лід»,
+параметри складаються з поточної вкладки: `assigneeId` для «Мої»/
+«Нерозподілені», `stage=IN_WORK` для «Ліди в роботі», `q` з пошуку.
+Ховається на вкладці «Архів» — `ExportClientsQueryDto` на бекенді не
+приймає `deleted`, тож експорт з цього фільтра не має сенсу.
+
+На `TasksPage.tsx` — кнопка в `PageHeader`, параметр лише `assigneeId`
+для «Мої». `ExportTasksQueryDto.status` приймає **одне** значення
+(`@IsIn`), а не CSV-список, як `GET /tasks` (`status=OPEN,IN_PROGRESS`) —
+тому повторити групування вкладок «Всі»/«Завершені» у фільтрі експорту
+свідомо не намагались, лишили як відкрите питання, якщо знадобиться.
