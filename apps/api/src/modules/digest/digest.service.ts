@@ -74,7 +74,7 @@ export class DigestService {
             type: 'leads_inactive_digest',
             title: 'Ранковий дайджест: усі менеджери',
             body: `Прострочено всього: ${totals.overdue}. Лідів без активності: ${totals.inactiveLeads}. Нерозподілені: ${unassignedPool}.`,
-            link: '/clients?assigneeId=none',
+            link: '/leads',
           });
         }
       }

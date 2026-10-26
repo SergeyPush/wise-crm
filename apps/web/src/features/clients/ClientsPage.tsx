@@ -19,9 +19,9 @@ import { useNavigate } from '@tanstack/react-router';
 import { DataTable, type DataTableColumn } from 'mantine-datatable';
 import { useContextMenu } from 'mantine-contextmenu';
 import { useEffect, useState } from 'react';
-import { Paginated } from 'shared';
+import { ClientSegment, Paginated } from 'shared';
 import { ApiRequestError, api } from '../../lib/api';
-import { TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
+import { TAX_SYSTEM_LABELS, formatDate, formatRelative } from '../../lib/format';
 import { PageHeader } from '../../components/PageHeader';
 import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { useCan, useMe } from '../auth/useAuth';
@@ -54,7 +54,8 @@ function tabToQuery(tab: Tab, meId?: string): string {
 
 const PAGE_SIZE = 25;
 
-export function ClientsPage() {
+export function ClientsPage({ segment }: { segment: ClientSegment }) {
+  const isLeads = segment === 'leads';
   const navigate = useNavigate();
   const { data: me } = useMe();
   const can = useCan(me);
@@ -79,16 +80,17 @@ export function ClientsPage() {
   }, [tab, page, debouncedSearch]);
 
   const poolCount = useQuery({
-    queryKey: ['clients', 'pool-count'],
-    queryFn: () => api.get<Paginated<ClientListItem>>('/clients?assigneeId=none&limit=1'),
+    // Лічильник у чипі «Нерозподілені» — в межах свого сегмента (бейдж у меню — загальний)
+    queryKey: ['clients', 'pool-count', segment],
+    queryFn: () => api.get<Paginated<ClientListItem>>(`/clients?assigneeId=none&segment=${segment}&limit=1`),
     select: (r) => r.total,
   });
 
   const query = useQuery({
-    queryKey: ['clients', tab, debouncedSearch, page, me?.id],
+    queryKey: ['clients', segment, tab, debouncedSearch, page, me?.id],
     queryFn: () =>
       api.get<Paginated<ClientListItem>>(
-        `/clients?limit=${PAGE_SIZE}&page=${page}${tabToQuery(tab, me?.id)}${debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ''}`,
+        `/clients?limit=${PAGE_SIZE}&page=${page}&segment=${segment}${tabToQuery(tab, me?.id)}${debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ''}`,
       ),
     enabled: tab !== 'mine' || Boolean(me?.id),
     placeholderData: (prev) => prev,
@@ -144,11 +146,13 @@ export function ClientsPage() {
       },
     },
     {
-      accessor: 'lastActivityAt',
-      title: 'Активність',
+      // Дата потрапляння в CRM замість «Активність» (беклог 26.10.2026);
+      // lastActivityAt лишається для алертів FR-5.2.1, просто не в таблиці
+      accessor: 'createdAt',
+      title: 'Дата створення',
       render: (c) => (
         <Text size="sm" c="dimmed">
-          {formatRelative(c.lastActivityAt ?? c.createdAt)}
+          {formatDate(c.createdAt)}
         </Text>
       ),
     },
@@ -163,18 +167,20 @@ export function ClientsPage() {
   return (
     <>
       <PageHeader
-        title="Клієнти"
+        title={isLeads ? 'Ліди' : 'Клієнти'}
         actions={
           <>
             {/* Право export:run — лише ADMIN (рішення 01.09.2026). «Архів» без кнопки:
                 deleted-фільтр не підтримує ExportClientsQueryDto на бекенді. */}
-            {can('export:run') && tab !== 'archived' && (
+            {/* На «Клієнтах» експорт поки не потрібен (беклог 26.10.2026) */}
+            {isLeads && can('export:run') && tab !== 'archived' && (
               <Button
                 component="a"
                 href={exportClientsUrl({
                   q: debouncedSearch || undefined,
                   assigneeId: tab === 'mine' ? me?.id : tab === 'pool' ? 'none' : undefined,
                   stage: tab === 'inWork' ? 'IN_WORK' : undefined,
+                  segment,
                 })}
                 target="_blank"
                 rel="noopener"
@@ -184,9 +190,12 @@ export function ClientsPage() {
                 Експорт
               </Button>
             )}
-            <Button leftSection={<IconPlus size={16} />} onClick={createHandlers.open}>
-              Новий лід
-            </Button>
+            {/* Новий запис завжди лід — створюється лише з «Лідів» */}
+            {isLeads && (
+              <Button leftSection={<IconPlus size={16} />} onClick={createHandlers.open}>
+                Новий лід
+              </Button>
+            )}
           </>
         }
       />
@@ -210,7 +219,8 @@ export function ClientsPage() {
             [
               ['all', 'Усі'],
               ['mine', 'Мої'],
-              ['inWork', 'Ліди в роботі'],
+              // «Ліди в роботі» (stage IN_WORK) серед клієнтів завжди порожні
+              ...(isLeads ? ([['inWork', 'Ліди в роботі']] as const) : []),
               ['pool', 'Нерозподілені'],
               // FR-8.1 «Відновити» — архів бачить лише той, хто може відновлювати
               ...(me?.role === 'ADMIN' ? ([['archived', 'Архів']] as const) : []),
@@ -236,7 +246,7 @@ export function ClientsPage() {
         ) : !query.isLoading && query.data && query.data.items.length === 0 ? (
           <EmptyState
             title={
-              debouncedSearch ? 'Нічого не знайдено' : tab === 'pool' ? 'Пул порожній' : tab === 'archived' ? 'Архів порожній' : 'Клієнтів поки немає'
+              debouncedSearch ? 'Нічого не знайдено' : tab === 'pool' ? 'Пул порожній' : tab === 'archived' ? 'Архів порожній' : isLeads ? 'Лідів поки немає' : 'Клієнтів поки немає'
             }
             description={
               debouncedSearch
@@ -245,10 +255,12 @@ export function ClientsPage() {
                   ? 'Усі заявки розібрані — це нормальний стан'
                   : tab === 'archived'
                     ? 'Архівованих клієнтів немає — це нормальний стан'
-                    : 'Заведіть першого ліда кнопкою вище'
+                    : isLeads
+                      ? 'Заведіть першого ліда кнопкою вище'
+                      : 'Тут з\'являться ліди, переведені в статус «Клієнт»'
             }
             action={
-              !debouncedSearch && tab !== 'pool' && tab !== 'archived' ? <Button onClick={createHandlers.open}>Новий лід</Button> : undefined
+              isLeads && !debouncedSearch && tab !== 'pool' && tab !== 'archived' ? <Button onClick={createHandlers.open}>Новий лід</Button> : undefined
             }
           />
         ) : (

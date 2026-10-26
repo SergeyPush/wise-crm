@@ -8,7 +8,7 @@ test('ПКМ і оптимістичний відкат', async ({ page }) => {
   await loginAs(page, MANAGER_EMAIL);
 
   const displayName = `E2E ПКМ ${Date.now()}`;
-  await page.goto('/clients');
+  await page.goto('/leads');
   await page.getByRole('button', { name: 'Новий лід' }).click();
   const drawer = page.getByRole('dialog');
   await drawer.getByLabel("Ім'я або назва").fill(displayName);
@@ -19,7 +19,7 @@ test('ПКМ і оптимістичний відкат', async ({ page }) => {
   await expect(page.getByRole('heading', { name: displayName })).toBeVisible();
 
   // Свіжий лід стоїть у статусі «Лід» (isDefaultForNew) — саме на нього чекаємо назад
-  await page.goto('/clients');
+  await page.goto('/leads');
   const row = page.locator('tr', { hasText: displayName });
   await expect(row.getByText('Лід', { exact: true })).toBeVisible();
 

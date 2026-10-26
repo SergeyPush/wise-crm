@@ -31,11 +31,11 @@ import { IconArrowLeft, IconPencil, IconPhoneCall, IconPlus, IconUserCheck } fro
 import { Link, useParams } from '@tanstack/react-router';
 import { useContextMenu } from 'mantine-contextmenu';
 import { useState } from 'react';
-import { TaxSystem } from 'shared';
+import { CLIENT_STATUS_CODE, TaxSystem } from 'shared';
 import { PageHeader } from '../../components/PageHeader';
 import { EmptyState, ErrorState } from '../../components/EmptyState';
 import { ApiRequestError, api } from '../../lib/api';
-import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatRelative } from '../../lib/format';
+import { CLIENT_TYPE_LABELS, TAX_SYSTEM_LABELS, formatDate, formatRelative } from '../../lib/format';
 import { useCan, useMe } from '../auth/useAuth';
 import { ActivityFeed } from '../activity/ActivityFeed';
 import { CommentsPanel } from '../comments/CommentsPanel';
@@ -48,7 +48,7 @@ import { openCompleteTaskModal } from '../tasks/TaskModals';
 import { TASK_TYPE_LABELS, TaskItem } from '../tasks/types';
 import { ClientCard, ContactRef } from './types';
 
-// Поля блока «Для тарифу» (FR-2.0.5) — чек-лист при WON перевіряє саме їх.
+// Поля блока «Для тарифу» (FR-2.0.5) — чек-лист при переході в «Клієнт» перевіряє саме їх.
 const TARIFF_FIELDS: Array<{ key: keyof ClientCard; label: string }> = [
   { key: 'taxSystem', label: 'Система оподаткування' },
   { key: 'documentsPerMonth', label: 'Документів на місяць' },
@@ -93,7 +93,7 @@ export function ClientCardPage() {
           title="Клієнта не знайдено"
           description="Можливо, його видалили або посилання застаріле"
           action={
-            <Button component={Link} to="/clients" variant="light">
+            <Button component={Link} to="/leads" variant="light">
               До списку
             </Button>
           }
@@ -113,13 +113,16 @@ export function ClientCardPage() {
   const primary = client.assignees.find((a) => a.role === 'PRIMARY');
   const isMine = primary?.user.id === me?.id;
   const missingTariff = TARIFF_FIELDS.filter((f) => client[f.key] === null || client[f.key] === undefined);
+  // Картка спільна — «назад» веде в розділ за статусом, а не за URL
+  const isClient = client.status.code === CLIENT_STATUS_CODE;
+  const listTo = isClient ? '/clients' : '/leads';
 
   return (
     <>
       {/* Не завжди зрозуміло, чи ти зараз на клієнті чи на задачі (feedback 27.08.2026) */}
       <Breadcrumbs mb="xs">
-        <Anchor component={Link} to="/clients" size="sm" c="dimmed">
-          Клієнти
+        <Anchor component={Link} to={listTo} size="sm" c="dimmed">
+          {isClient ? 'Клієнти' : 'Ліди'}
         </Anchor>
         <Text size="sm" c="dimmed">
           {client.displayName}
@@ -130,7 +133,7 @@ export function ClientCardPage() {
         title={client.displayName}
         subtitle={`${CLIENT_TYPE_LABELS[client.type] ?? client.type} · у статусі ${formatRelative(client.statusSince)}`}
         actions={
-          <Button component={Link} to="/clients" variant="subtle" leftSection={<IconArrowLeft size={16} />}>
+          <Button component={Link} to={listTo} variant="subtle" leftSection={<IconArrowLeft size={16} />}>
             До списку
           </Button>
         }
@@ -185,6 +188,7 @@ export function ClientCardPage() {
                 />
                 <Field label="Юридична адреса" value={client.legalAddress} />
                 <Field label="Фактична адреса" value={client.actualAddress} />
+                <Field label="Дата створення" value={formatDate(client.createdAt)} />
               </Grid>
               {client.notes && (
                 <Text size="sm" mt="sm" c="dimmed">
@@ -684,7 +688,7 @@ function ChangeStatusModal({ client, onClose }: { client: ClientCard; onClose: (
   });
 
   const target = statuses.data?.find((s) => s.id === statusId);
-  const missingTariff = target?.code === 'WON' ? TARIFF_FIELDS.filter((f) => !client[f.key]) : [];
+  const missingTariff = target?.code === CLIENT_STATUS_CODE ? TARIFF_FIELDS.filter((f) => !client[f.key]) : [];
 
   const mutation = useMutation({
     mutationFn: () => api.post(`/clients/${client.id}/status`, { statusId, reasonId: reasonId ?? undefined, comment: comment || undefined }),

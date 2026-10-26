@@ -138,6 +138,33 @@ describe('Клієнти та воронка (етап 2)', () => {
       expect(res.body.items.every((c: { assignees: unknown[] }) => c.assignees.length === 0)).toBe(true);
     });
 
+    it('segment=leads — усе, крім статусу CLIENT; segment=clients — лише CLIENT (беклог 26.10.2026)', async () => {
+      const { agent } = await loggedInUser();
+      const lead = await makeClient(ctx.prisma, { displayName: 'Лід' });
+      const client = await makeClient(ctx.prisma, { displayName: 'Клієнт', statusCode: 'CLIENT' });
+      const ids = (body: { items: Array<{ id: string }> }) => body.items.map((c) => c.id);
+
+      const leads = await agent.get('/clients?segment=leads&limit=50');
+      const clients = await agent.get('/clients?segment=clients&limit=50');
+
+      expect(ids(leads.body)).toEqual([lead.id]);
+      expect(ids(clients.body)).toEqual([client.id]);
+    });
+
+    it('segment поєднується зі stage, а не перезаписує його', async () => {
+      const { agent } = await loggedInUser();
+      await makeClient(ctx.prisma, { statusCode: 'CLIENT' }); // stage WON, але сегмент «Клієнти»
+
+      const res = await agent.get('/clients?segment=leads&stage=WON&limit=50');
+
+      expect(res.body.total).toBe(0);
+    });
+
+    it('невідомий segment — 400', async () => {
+      const { agent } = await loggedInUser();
+      expect((await agent.get('/clients?segment=foo')).status).toBe(400);
+    });
+
     it('поле total і форма пагінації відповідають контракту', async () => {
       const { agent } = await loggedInUser();
       await makeClient(ctx.prisma);

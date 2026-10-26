@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, Stage } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { ErrorCode, can } from 'shared';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,6 +9,7 @@ import { normalizePhone } from '../../common/utils/phone.util';
 import { isValidEdrpou, isValidRnokpp } from '../../common/utils/validators.util';
 import { ActivityService, diffChanged } from '../activity/activity.service';
 import { AuditService } from '../audit/audit.service';
+import { statusWhere } from './client-segment';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   AddTagDto,
@@ -73,7 +74,7 @@ export class ClientsService {
     const where: Prisma.ClientWhereInput = {
       deletedAt: q.deleted ? { not: null } : null,
       ...(q.statusId ? { statusId: q.statusId } : {}),
-      ...(q.stage ? { status: { stage: q.stage as Stage } } : {}),
+      ...statusWhere(q.stage, q.segment),
       ...(q.sourceId ? { sourceId: q.sourceId } : {}),
       ...(q.type ? { type: q.type } : {}),
       ...(q.tagId ? { tags: { some: { tagId: q.tagId } } } : {}),
