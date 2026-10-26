@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, Stage, TaskType } from '@prisma/client';
+import { Prisma, TaskType } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { statusWhere } from '../clients/client-segment';
 import { ExportClientsQueryDto, ExportTasksQueryDto } from './dto/export.dto';
 
 // FR-E2: реквізити текстом — інакше Excel зжере провідний нуль у ЄДРПОУ.
@@ -98,7 +99,7 @@ export class ExportService {
     const where: Prisma.ClientWhereInput = {
       deletedAt: null,
       ...(q.statusId ? { statusId: q.statusId } : {}),
-      ...(q.stage ? { status: { stage: q.stage as Stage } } : {}),
+      ...statusWhere(q.stage, q.segment),
       ...(q.sourceId ? { sourceId: q.sourceId } : {}),
       ...(q.tagId ? { tags: { some: { tagId: q.tagId } } } : {}),
       ...(q.q ? { displayName: { contains: q.q, mode: 'insensitive' } } : {}),

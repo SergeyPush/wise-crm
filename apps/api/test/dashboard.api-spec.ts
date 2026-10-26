@@ -52,7 +52,7 @@ describe('GET /dashboard (FR-5.1, FR-5.2)', () => {
     const source = await ctx.prisma.leadSource.findFirstOrThrow({});
     const lead = await makeClient(ctx.prisma);
     await ctx.prisma.client.update({ where: { id: lead.id }, data: { sourceId: source.id } });
-    const contract = await makeClient(ctx.prisma, { statusCode: 'WON' });
+    const contract = await makeClient(ctx.prisma, { statusCode: 'CLIENT' });
     await ctx.prisma.client.update({ where: { id: contract.id }, data: { sourceId: source.id } });
 
     const res = await agent.get('/dashboard?period=90');

@@ -2,6 +2,7 @@ import { AppShell as MantineAppShell, Avatar, Badge, Burger, Group, Menu, NavLin
 import { useDisclosure, useLocalStorage } from '@mantine/hooks';
 import {
   IconBook,
+  IconBriefcase,
   IconChecklist,
   IconLayoutDashboard,
   IconLogout,
@@ -13,10 +14,10 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
-import { Paginated, endOfKyivDay } from 'shared';
+import { CLIENT_STATUS_CODE, Paginated, endOfKyivDay } from 'shared';
 import { api } from '../lib/api';
 import { Me, useLogout } from '../features/auth/useAuth';
-import { ClientListItem } from '../features/clients/types';
+import { ClientCard, ClientListItem } from '../features/clients/types';
 import { NotificationBell } from '../features/notifications/NotificationBell';
 import { TaskItem } from '../features/tasks/types';
 import { GlobalSearch } from './GlobalSearch';
@@ -47,7 +48,7 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
 
   // Бейджей в навигации ровно два и больше не заводить: если их много,
   // на них перестают смотреть (06-ui-layout.md). «Задачі» — прострочені +
-  // сьогоднішні мої відкриті; «Клієнти» — нерозподілені ліди, лише якщо пул не пустий.
+  // сьогоднішні мої відкриті; «Ліди» — нерозподілені ліди, лише якщо пул не пустий.
   const dueTasks = useQuery({
     queryKey: ['tasks', 'count', 'nav-badge'],
     queryFn: () =>
@@ -64,9 +65,25 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
     refetchInterval: 60_000,
   });
 
+  // Картка /clients/:id спільна для лідів і клієнтів — розділ меню визначає
+  // статус запису. Той самий queryKey, що й у ClientCardPage: запит не дублюється.
+  const cardId = /^\/clients\/([^/]+)/.exec(pathname)?.[1];
+  const card = useQuery({
+    queryKey: ['clients', cardId],
+    queryFn: () => api.get<ClientCard>(`/clients/${cardId}`),
+    enabled: Boolean(cardId),
+  });
+  const cardSection = card.data ? (card.data.status.code === CLIENT_STATUS_CODE ? '/clients' : '/leads') : undefined;
+  const isActive = (to: string) => {
+    if (to === '/') return pathname === '/';
+    if (cardId) return cardSection === to;
+    return pathname.startsWith(to);
+  };
+
   const items: NavItem[] = [
     { label: 'Дашборд', to: '/', icon: <IconLayoutDashboard size={18} /> },
-    { label: 'Клієнти', to: '/clients', icon: <IconUsersGroup size={18} />, badge: poolCount.data || undefined },
+    { label: 'Ліди', to: '/leads', icon: <IconUsersGroup size={18} />, badge: poolCount.data || undefined },
+    { label: 'Клієнти', to: '/clients', icon: <IconBriefcase size={18} /> },
     { label: 'Задачі', to: '/tasks', icon: <IconChecklist size={18} />, badge: dueTasks.data || undefined },
     { label: 'Довідники', to: '/settings/dictionaries', icon: <IconBook size={18} />, adminOnly: true },
     { label: 'Користувачі', to: '/settings/users', icon: <IconUsers size={18} />, adminOnly: true },
@@ -147,7 +164,7 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
                 to={item.to}
                 label={collapsed ? undefined : item.label}
                 leftSection={item.icon}
-                active={item.to === '/' ? pathname === '/' : pathname.startsWith(item.to)}
+                active={isActive(item.to)}
                 rightSection={
                   !collapsed && item.badge ? (
                     <Badge size="sm" circle>

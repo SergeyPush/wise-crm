@@ -71,7 +71,7 @@ async function seedDemoData(adminId: string, managerId: string): Promise<void> {
       key: 'romashka',
       displayName: 'ТОВ «Кларус»',
       type: 'COMPANY' as const,
-      statusCode: 'WON',
+      statusCode: 'CLIENT',
       sourceCode: 'REFERRAL',
       taxSystem: 'EP3_5' as const,
       documentsPerMonth: 45,

@@ -18,7 +18,7 @@ function qs(params: Record<string, string | undefined>): string {
 
 // Набір полів = ExportClientsQueryDto (apps/api/.../export/dto/export.dto.ts):
 // deleted/page/limit там немає, тому «Архів» кнопку не показує (ClientsPage).
-export function exportClientsUrl(params: { q?: string; assigneeId?: string; stage?: string }): string {
+export function exportClientsUrl(params: { q?: string; assigneeId?: string; stage?: string; segment?: string }): string {
   return `${BASE}/export/clients.xlsx${qs(params)}`;
 }
 

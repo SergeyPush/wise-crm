@@ -32,10 +32,18 @@ const dashboardRoute = createRoute({
   component: () => <RequireAuth>{(me) => <DashboardPage me={me} />}</RequireAuth>,
 });
 
+// «Ліди» — усе, крім статусу «Клієнт»; «Клієнти» — лише він (рішення 26.10.2026).
+// Картка спільна (/clients/$clientId): URL не міняється при переході лід → клієнт.
+const leadsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/leads',
+  component: () => <RequireAuth>{() => <ClientsPage segment="leads" />}</RequireAuth>,
+});
+
 const clientsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/clients',
-  component: () => <RequireAuth>{() => <ClientsPage />}</RequireAuth>,
+  component: () => <RequireAuth>{() => <ClientsPage segment="clients" />}</RequireAuth>,
 });
 
 const clientCardRoute = createRoute({
@@ -78,6 +86,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   resetRoute,
   dashboardRoute,
+  leadsRoute,
   clientsRoute,
   clientCardRoute,
   tasksRoute,

@@ -16,7 +16,7 @@ const STATUSES = [
   { code: 'IN_PROGRESS', label: 'Переговори', stage: Stage.IN_WORK, sortOrder: 20, color: 'blue' },
   { code: 'PROPOSAL_SENT', label: 'КП надіслано', stage: Stage.IN_WORK, sortOrder: 30, color: 'indigo' },
   { code: 'CONTRACT_SENT', label: 'Договір на підписанні', stage: Stage.IN_WORK, sortOrder: 40, color: 'violet' },
-  { code: 'WON', label: 'Договір підписано', stage: Stage.WON, sortOrder: 50, color: 'green', isTerminal: true },
+  { code: 'CLIENT', label: 'Клієнт', stage: Stage.WON, sortOrder: 50, color: 'green', isTerminal: true },
   { code: 'LOST', label: 'Відмова', stage: Stage.LOST, sortOrder: 60, color: 'red', isTerminal: true, requiresReason: true },
 ] as const;
 

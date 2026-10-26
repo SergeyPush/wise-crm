@@ -19,6 +19,11 @@ export class ExportClientsQueryDto {
   @IsIn(['LEAD', 'IN_WORK', 'WON', 'LOST'])
   stage?: string;
 
+  @ApiPropertyOptional({ description: 'leads — усе, крім статусу CLIENT; clients — лише CLIENT' })
+  @IsOptional()
+  @IsIn(['leads', 'clients'])
+  segment?: string;
+
   @ApiPropertyOptional({ description: 'uuid або "none"' })
   @IsOptional()
   @IsString()

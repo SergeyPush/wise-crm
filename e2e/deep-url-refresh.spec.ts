@@ -8,7 +8,7 @@ test('глибокий URL і оновлення сторінки', async ({ pag
   await loginAs(page, MANAGER_EMAIL);
 
   const displayName = `E2E Deep URL ${Date.now()}`;
-  await page.goto('/clients');
+  await page.goto('/leads');
   await page.getByRole('button', { name: 'Новий лід' }).click();
   const drawer = page.getByRole('dialog');
   await drawer.getByLabel("Ім'я або назва").fill(displayName);

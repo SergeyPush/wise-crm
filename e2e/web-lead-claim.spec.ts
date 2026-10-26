@@ -18,7 +18,7 @@ test('заявка з сайту до взяття в роботу', async ({ pa
   });
   expect(submission.ok()).toBeTruthy();
 
-  await page.goto('/clients');
+  await page.goto('/leads');
   await page.getByRole('button', { name: 'Нерозподілені' }).click();
 
   const row = page.locator('tr', { hasText: displayName });

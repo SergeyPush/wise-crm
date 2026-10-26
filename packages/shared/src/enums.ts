@@ -29,6 +29,12 @@ export type TaxSystem = (typeof TaxSystem)[keyof typeof TaxSystem];
 export const Stage = { LEAD: 'LEAD', IN_WORK: 'IN_WORK', WON: 'WON', LOST: 'LOST' } as const;
 export type Stage = (typeof Stage)[keyof typeof Stage];
 
+// Статус «Клієнт» (колишній WON, рішення 26.10.2026) ділить список на
+// «Ліди» (усе, крім нього) і «Клієнти» (лише він) — по code, не по stage.
+export const CLIENT_STATUS_CODE = 'CLIENT';
+export const ClientSegment = { LEADS: 'leads', CLIENTS: 'clients' } as const;
+export type ClientSegment = (typeof ClientSegment)[keyof typeof ClientSegment];
+
 export const TaskType = {
   CALL: 'CALL',
   PROPOSAL: 'PROPOSAL',

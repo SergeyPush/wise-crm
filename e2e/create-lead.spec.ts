@@ -7,7 +7,7 @@ test('заведення ліда', async ({ page }) => {
   await loginAs(page, MANAGER_EMAIL);
 
   const displayName = `E2E Лід ${Date.now()}`;
-  await page.goto('/clients');
+  await page.goto('/leads');
   await page.getByRole('button', { name: 'Новий лід' }).click();
 
   const drawer = page.getByRole('dialog');
@@ -20,6 +20,6 @@ test('заведення ліда', async ({ page }) => {
   // Створення переносить на картку клієнта
   await expect(page.getByRole('heading', { name: displayName })).toBeVisible();
 
-  await page.goto('/clients');
+  await page.goto('/leads');
   await expect(page.getByText(displayName)).toBeVisible();
 });

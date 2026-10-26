@@ -7,7 +7,7 @@ test('закриття задачі, що вимагає результат', as
   await loginAs(page, MANAGER_EMAIL);
 
   const displayName = `E2E КП ${Date.now()}`;
-  await page.goto('/clients');
+  await page.goto('/leads');
   await page.getByRole('button', { name: 'Новий лід' }).click();
   const drawer = page.getByRole('dialog');
   await drawer.getByLabel("Ім'я або назва").fill(displayName);
@@ -22,7 +22,7 @@ test('закриття задачі, що вимагає результат', as
   // окремим верхньорівневим пунктом ПКМ (tel:-дія), локатор по тексту
   // ловить не той. Квіковий інпут на /tasks завжди створює ІНШЕ, де
   // результат не обов'язковий — тому й не годиться для цього сценарію.
-  await page.goto('/clients');
+  await page.goto('/leads');
   const clientRow = page.locator('tr', { hasText: displayName });
   await clientRow.click({ button: 'right' });
   await page.locator('.mantine-contextmenu-item-button-title', { hasText: 'Створити задачу' }).hover();
