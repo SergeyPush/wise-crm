@@ -144,26 +144,36 @@ describe('Довідники: CRUD чотирьох редагованих (ро
     const agent = await loggedInUser('ADMIN');
     const status = await ctx.prisma.clientStatus.findFirstOrThrow({ where: { code: 'NEW' } });
 
-    const res = await agent.patch(`/dictionaries/statuses/${status.id}`, {
-      label: 'Нова назва',
-      color: 'grape',
-      sortOrder: status.sortOrder + 10,
-      // code/isActive — легітимні поля DTO (в інших довідниках редаговані),
-      // але сервіс має їх ігнорувати саме для статусів — перевіряємо, що
-      // структурні поля не змінюються навіть коли їх все ж таки надіслати.
-      code: 'HACKED',
-      isActive: !status.isActive,
-    });
+    // Статус NEW — сидований і не труркейтиться між тестами (DICTIONARY_TABLES),
+    // а e2e працюють на тій самій тестовій БД і шукають його за назвою «Лід».
+    // Тому повертаємо назву/колір/порядок назад — навіть якщо перевірка впала.
+    try {
+      const res = await agent.patch(`/dictionaries/statuses/${status.id}`, {
+        label: 'Нова назва',
+        color: 'grape',
+        sortOrder: status.sortOrder + 10,
+        // code/isActive — легітимні поля DTO (в інших довідниках редаговані),
+        // але сервіс має їх ігнорувати саме для статусів — перевіряємо, що
+        // структурні поля не змінюються навіть коли їх все ж таки надіслати.
+        code: 'HACKED',
+        isActive: !status.isActive,
+      });
 
-    expect(res.status).toBe(200);
-    expect(res.body.label).toBe('Нова назва');
-    expect(res.body.color).toBe('grape');
-    expect(res.body.sortOrder).toBe(status.sortOrder + 10);
-    expect(res.body.code).toBe('NEW');
-    expect(res.body.stage).toBe(status.stage);
-    expect(res.body.isTerminal).toBe(status.isTerminal);
-    expect(res.body.isDefaultForNew).toBe(status.isDefaultForNew);
-    expect(res.body.isActive).toBe(status.isActive);
+      expect(res.status).toBe(200);
+      expect(res.body.label).toBe('Нова назва');
+      expect(res.body.color).toBe('grape');
+      expect(res.body.sortOrder).toBe(status.sortOrder + 10);
+      expect(res.body.code).toBe('NEW');
+      expect(res.body.stage).toBe(status.stage);
+      expect(res.body.isTerminal).toBe(status.isTerminal);
+      expect(res.body.isDefaultForNew).toBe(status.isDefaultForNew);
+      expect(res.body.isActive).toBe(status.isActive);
+    } finally {
+      await ctx.prisma.clientStatus.update({
+        where: { id: status.id },
+        data: { label: status.label, color: status.color, sortOrder: status.sortOrder },
+      });
+    }
   });
 
   it('USER отримує 403 на редагування статусу', async () => {
