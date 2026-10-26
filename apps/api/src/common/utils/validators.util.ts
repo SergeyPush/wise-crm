@@ -3,16 +3,22 @@
  * Ошибка здесь тихая и дорогая — реквизиты уходят в договір и звітність.
  */
 
-/** ЄДРПОУ: 8 цифр юрлица, контрольная цифра — последняя. */
+/**
+ * ЄДРПОУ: 8 цифр юрлица, контрольная цифра — последняя.
+ * Веса зависят от диапазона кода: для 30 000 000–60 000 000 — 7,1,2,3,4,5,6, иначе 1..7.
+ */
 export function isValidEdrpou(value: string): boolean {
   if (!/^\d{8}$/.test(value)) return false;
   const d = value.split('').map(Number);
+  const code = Number(value);
 
+  const base = code < 30_000_000 || code > 60_000_000 ? [1, 2, 3, 4, 5, 6, 7] : [7, 1, 2, 3, 4, 5, 6];
   const weighted = (weights: number[]): number => weights.reduce((sum, w, i) => sum + w * (d[i] ?? 0), 0);
 
-  let mod = weighted([1, 2, 3, 4, 5, 6, 7]) % 11;
+  let mod = weighted(base) % 11;
   if (mod === 10) {
-    mod = weighted([3, 4, 5, 6, 7, 8, 9]) % 11;
+    // Второй проход: каждый вес +2
+    mod = weighted(base.map((w) => w + 2)) % 11;
     if (mod === 10) mod = 0;
   }
   return mod === d[7];

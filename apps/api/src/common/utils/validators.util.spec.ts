@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { isValidEdrpou, isValidIban, isValidRnokpp } from './validators.util';
 
 describe('isValidEdrpou', () => {
-  it.each(['12345678', '30332231'])('приймає коректний код %s', (v) => {
+  // 14360570 — ПриватБанк (ваги 1..7); 31316718, 40075815, 36301423 — діапазон 30–60 млн (ваги 7,1..6)
+  it.each(['12345678', '14360570', '31316718', '40075815', '36301423'])('приймає коректний код %s', (v) => {
     expect(isValidEdrpou(v)).toBe(true);
   });
 
-  it('відхиляє зіпсовану контрольну цифру', () => {
-    expect(isValidEdrpou('12345679')).toBe(false);
+  it.each(['12345679', '36301424', '30332231'])('відхиляє зіпсовану контрольну цифру %s', (v) => {
+    expect(isValidEdrpou(v)).toBe(false);
   });
 
   it.each(['1234567', '123456789', '1234567a', ''])('відхиляє неправильний формат %s', (v) => {
