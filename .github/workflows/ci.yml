@@ -4,6 +4,8 @@ name: CI
 
 on:
   pull_request:
+    # labeled — чтобы навешивание метки e2e сразу запускало Playwright
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
     # Deploy триггериться через workflow_run від завершення CI (deploy.yml) —
@@ -68,8 +70,12 @@ jobs:
 
   e2e:
     name: Playwright
-    # Только на main: UI-тесты самые медленные, на каждом PR они не окупаются
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # На main — всегда; на PR — только с меткой e2e: UI-тесты самые медленные,
+    # на каждом PR они не окупаются, но по запросу их можно прогнать до merge
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'e2e'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: check
