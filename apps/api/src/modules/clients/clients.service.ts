@@ -152,6 +152,8 @@ export class ClientsService {
       throw new AppException(500, ErrorCode.INTERNAL, 'Не налаштовано стартовий статус ліда');
     }
 
+    await this.assertActiveSource(dto.sourceId);
+
     const assigneeId = dto.assigneeId ?? actorId;
     const assignee = await this.prisma.user.findUnique({ where: { id: assigneeId } });
     if (!assignee || !assignee.isActive) {
@@ -200,6 +202,12 @@ export class ClientsService {
       throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Некоректний РНОКПП');
     }
 
+    // Backlog «Зміна джерела»: перевіряємо лише нове значення — незмінене
+    // (навіть якщо джерело згодом деактивували) не має блокувати збереження
+    // інших полів картки.
+    const sourceChanged = dto.sourceId !== undefined && dto.sourceId !== current.sourceId;
+    if (sourceChanged) await this.assertActiveSource(dto.sourceId!);
+
     const { updatedAt: dtoUpdatedAt, vatRegDate, contractDate, ...rest } = dto;
     const staleAt = new Date(dtoUpdatedAt);
     const data: Prisma.ClientUncheckedUpdateInput = {
@@ -229,10 +237,31 @@ export class ClientsService {
       // лише перелік імен полів — current уже під рукою (fetched вище), data
       // містить фінальні (сконвертовані) значення, що йдуть у БД.
       const changed = diffChanged(Object.keys(data), current as unknown as Record<string, unknown>, data as Record<string, unknown>);
+      // У стрічці активності — назви джерел, а не uuid
+      if (sourceChanged) await this.labelSourceChange(changed, tx);
       await this.activity.log({ clientId: id, actorId, type: 'field_changed', payload: { changed } }, tx);
     });
 
     return this.get(id);
+  }
+
+  /** Джерело має існувати й бути активним — інакше 400, а не FK-помилка (500). */
+  private async assertActiveSource(sourceId: string) {
+    const source = await this.prisma.leadSource.findUnique({ where: { id: sourceId } });
+    if (!source || !source.isActive) {
+      throw new AppException(400, ErrorCode.VALIDATION_FAILED, 'Джерело не знайдено');
+    }
+  }
+
+  /** Підміняє uuid джерела в diff-і field_changed на його назву. */
+  private async labelSourceChange(changed: ReturnType<typeof diffChanged>, tx: Prisma.TransactionClient) {
+    const entry = changed.find((c) => c.field === 'sourceId');
+    if (!entry) return;
+    const ids = [entry.from, entry.to].filter((v): v is string => typeof v === 'string');
+    const rows = await tx.leadSource.findMany({ where: { id: { in: ids } }, select: { id: true, label: true } });
+    const label = (v: typeof entry.from) => rows.find((r) => r.id === v)?.label ?? v;
+    entry.from = label(entry.from);
+    entry.to = label(entry.to);
   }
 
   async remove(id: string, actorId: string, ip?: string) {
