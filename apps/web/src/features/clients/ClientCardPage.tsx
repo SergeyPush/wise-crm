@@ -591,8 +591,20 @@ function EditClientModal({ client, onClose }: { client: ClientCard; onClose: () 
       monthlyFee: typeof client.monthlyFee === 'string' ? Number(client.monthlyFee) : (client.monthlyFee ?? undefined),
       contractNo: client.contractNo ?? '',
       notes: client.notes ?? '',
+      sourceId: client.source?.id ?? '',
     },
   });
+
+  const sources = useQuery({
+    queryKey: ['dictionaries', 'lead-sources'],
+    queryFn: () => api.get<Array<{ id: string; label: string }>>('/dictionaries/lead-sources'),
+  });
+  // Довідник віддає лише активні — поточне (можливо деактивоване) джерело
+  // додаємо вручну, щоб Select його показав, а не порожнє поле.
+  const sourceOptions = (sources.data ?? []).map((s) => ({ value: s.id, label: s.label }));
+  if (client.source?.id && !sourceOptions.some((o) => o.value === client.source?.id)) {
+    sourceOptions.push({ value: client.source.id, label: client.source.label });
+  }
 
   const mutation = useMutation({
     mutationFn: (values: typeof form.values) =>
@@ -601,6 +613,7 @@ function EditClientModal({ client, onClose }: { client: ClientCard; onClose: () 
         edrpou: values.edrpou || undefined,
         rnokpp: values.rnokpp || undefined,
         taxSystem: values.taxSystem || undefined,
+        sourceId: values.sourceId || undefined,
         updatedAt: client.updatedAt,
       }),
     onSuccess: () => {
@@ -628,6 +641,7 @@ function EditClientModal({ client, onClose }: { client: ClientCard; onClose: () 
           )}
           <TextInput label="Назва" {...form.getInputProps('displayName')} />
           <TextInput label="Юридична назва" {...form.getInputProps('legalName')} />
+          <Select label="Джерело" data={sourceOptions} allowDeselect={false} {...form.getInputProps('sourceId')} />
           <Group grow>
             <TextInput label="ЄДРПОУ" {...form.getInputProps('edrpou')} />
             <TextInput label="РНОКПП" {...form.getInputProps('rnokpp')} />

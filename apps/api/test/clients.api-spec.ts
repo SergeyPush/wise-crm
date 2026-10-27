@@ -264,6 +264,80 @@ describe('Клієнти та воронка (етап 2)', () => {
     });
   });
 
+  describe('Зміна джерела (backlog 26.10.2026)', () => {
+    // Довідник джерел не чиститься resetData — беремо seed-записи
+    async function otherSourceId(): Promise<string> {
+      const s = await ctx.prisma.leadSource.findFirstOrThrow({ where: { isSystem: false, isActive: true } });
+      return s.id;
+    }
+
+    async function siteLead() {
+      const statusId = (await ctx.prisma.clientStatus.findFirstOrThrow({ where: { isDefaultForNew: true } })).id;
+      return ctx.prisma.client.create({ data: { displayName: 'Лід', statusId, sourceId: await websiteSourceId() } });
+    }
+
+    it.each(['USER', 'ADMIN'] as const)('%s змінює джерело (навіть системне «Сайт») — 200, у стрічці назви, не uuid', async (role) => {
+      const { agent } = await loggedInUser(`${role.toLowerCase()}@test.ua`, role);
+      const client = await siteLead();
+      const sourceId = await otherSourceId();
+
+      const res = await agent.patch(`/clients/${client.id}`, { updatedAt: client.updatedAt.toISOString(), sourceId });
+      expect(res.status).toBe(200);
+      expect(res.body.source.id).toBe(sourceId);
+
+      const [site, other] = await Promise.all([
+        ctx.prisma.leadSource.findUniqueOrThrow({ where: { id: await websiteSourceId() } }),
+        ctx.prisma.leadSource.findUniqueOrThrow({ where: { id: sourceId } }),
+      ]);
+      const activity = await ctx.prisma.activityEvent.findFirstOrThrow({ where: { clientId: client.id, type: 'field_changed' } });
+      const changed = (activity.payload as { changed: Array<{ field: string; from: unknown; to: unknown }> }).changed;
+      expect(changed).toContainEqual({ field: 'sourceId', from: site.label, to: other.label });
+    });
+
+    it('неіснуюче джерело — 400', async () => {
+      const { agent } = await loggedInUser();
+      const client = await siteLead();
+
+      const res = await agent.patch(`/clients/${client.id}`, {
+        updatedAt: client.updatedAt.toISOString(),
+        sourceId: '00000000-0000-4000-8000-000000000000',
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('неактивне джерело — 400', async () => {
+      const { agent } = await loggedInUser();
+      const client = await siteLead();
+      const sourceId = await otherSourceId();
+      await ctx.prisma.leadSource.update({ where: { id: sourceId }, data: { isActive: false } });
+      try {
+        const res = await agent.patch(`/clients/${client.id}`, { updatedAt: client.updatedAt.toISOString(), sourceId });
+        expect(res.status).toBe(400);
+      } finally {
+        // відкочуємо, щоб не зламати інші тести (seed спільний)
+        await ctx.prisma.leadSource.update({ where: { id: sourceId }, data: { isActive: true } });
+      }
+    });
+
+    it('незмінене деактивоване джерело не блокує збереження інших полів', async () => {
+      const { agent } = await loggedInUser();
+      const client = await siteLead();
+      const siteId = await websiteSourceId();
+      // «Сайт» деактивувати через API не можна — лише напряму в БД, для перевірки
+      await ctx.prisma.leadSource.update({ where: { id: siteId }, data: { isActive: false } });
+      try {
+        const res = await agent.patch(`/clients/${client.id}`, {
+          updatedAt: client.updatedAt.toISOString(),
+          sourceId: siteId,
+          notes: 'Нотатка',
+        });
+        expect(res.status).toBe(200);
+      } finally {
+        await ctx.prisma.leadSource.update({ where: { id: siteId }, data: { isActive: true } });
+      }
+    });
+  });
+
   describe('Зміна статусу (FR-2.7, FR-2.8)', () => {
     it('перехід у статус з requiresReason без причини — 400', async () => {
       const { agent } = await loggedInUser();
